@@ -37,24 +37,44 @@
               
               <!-- Mobile view other action buttons -->
               <div class="d-sm-none mt-2">
-                <div class="d-flex gap-2">
-                  <button 
-                    class="btn btn-custom mobile-action-btn flex-grow-1 d-flex justify-content-center align-items-center"
-                    id="changeAllButtonMobile" 
-                    @click="changeAllQuestions"
-                    :disabled="isChangingAllQuestions"
-                  >
-                    <span v-if="isChangingAllQuestions" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    <i v-else class="bi bi-arrow-clockwise me-1"></i> 
-                    <span>{{ isChangingAllQuestions ? 'Changing...' : 'New Set' }}</span>
-                  </button>
-                  <button 
-                    class="btn btn-custom mobile-action-btn flex-grow-1 d-flex justify-content-center align-items-center"
-                    id="changeAllLayoutButtonMobile" 
-                    @click="(event) => showGlobalLayoutOptions(event)"
-                  >
-                    <i class="bi bi-grid me-1"></i> <span>Option Style</span>
-                  </button>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <button 
+                      class="btn btn-custom w-100 d-flex justify-content-center align-items-center"
+                      id="changeAllButtonMobile" 
+                      @click="changeAllQuestions"
+                      :disabled="isChangingAllQuestions"
+                      :title="isChangingAllQuestions ? 'Changing...' : 'New Set'"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="bottom"
+                    >
+                      <span v-if="isChangingAllQuestions" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      <i v-else class="bi bi-arrow-clockwise"></i>
+                    </button>
+                  </div>
+                  <div class="col-6">
+                    <button 
+                      class="btn btn-custom w-100 d-flex justify-content-center align-items-center"
+                      id="shuffleButtonMobile" 
+                      @click="shuffleQuestions"
+                      :disabled="isShuffling"
+                      :title="isShuffling ? 'Shuffling...' : 'Shuffle'"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="bottom"
+                    >
+                      <span v-if="isShuffling" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      <i v-else class="bi bi-shuffle"></i>
+                    </button>
+                  </div>
+                  <div class="col-12">
+                    <button 
+                      class="btn btn-custom w-100 d-flex justify-content-center align-items-center"
+                      id="changeAllLayoutButtonMobile" 
+                      @click="(event) => showGlobalLayoutOptions(event)"
+                    >
+                      <i class="bi bi-grid me-1"></i> <span>Option Style</span>
+                    </button>
+                  </div>
                 </div>
               </div>
               
@@ -63,9 +83,9 @@
             </div>
             <div class="col-12 col-sm-8 dynamic-style text-end">
               <div class="d-flex flex-wrap justify-content-end align-items-center gap-2">
-                <!-- Buttons for desktop/tablet screens -->
-                <div class="d-none d-sm-flex gap-2">
-                <button 
+                <!-- All buttons in one container for desktop/tablet screens -->
+                <div class="d-none d-sm-flex align-items-center gap-2">
+                  <button 
                     class="btn btn-custom dropdown-toggle"
                     @click="toggleMediumDropdown"
                   >
@@ -75,10 +95,23 @@
                     class="btn btn-custom" 
                     @click="changeAllQuestions"
                     :disabled="isChangingAllQuestions"
+                    :title="isChangingAllQuestions ? 'Changing...' : 'New Set'"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
                   >
-                    <span v-if="isChangingAllQuestions" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    <i v-else class="bi bi-arrow-clockwise me-2"></i> 
-                    {{ isChangingAllQuestions ? 'Changing...' : 'New Set' }}
+                    <span v-if="isChangingAllQuestions" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <i v-else class="bi bi-arrow-clockwise"></i>
+                  </button>
+                  <button 
+                    class="btn btn-custom" 
+                    @click="shuffleQuestions"
+                    :disabled="isShuffling"
+                    :title="isShuffling ? 'Shuffling...' : 'Shuffle'"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                  >
+                    <span v-if="isShuffling" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <i v-else class="bi bi-shuffle"></i>
                   </button>
                   <button 
                     class="btn btn-custom" 
@@ -86,8 +119,6 @@
                   >
                     <i class="bi bi-grid me-1"></i> Option Style
                   </button>
-                </div>
-                <div class="d-none d-sm-flex gap-2">
                   <button 
                     class="btn btn-dark" 
                     @click="savePage"
@@ -528,6 +559,7 @@
 import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
+import { useToastStore } from '@/stores/toast'
 
 // Define component name (for linter)
 defineOptions({
@@ -537,6 +569,7 @@ defineOptions({
 // Setup router and route
 const router = useRouter()
 const route = useRoute()
+const toastStore = useToastStore()
 
 // Loading state
 const isLoading = ref(true)
@@ -1823,8 +1856,27 @@ const createReplacementDisplayQuestion = (
 // Handle error in change question process
 const handleChangeQuestionError = (error: unknown) => {
   console.error('Error changing question:', error);
-  // Show error message to user
-  alert('Failed to change question. Please try again later.');
+    const err = error as any;
+  const status = err?.response?.status;
+  const errorMessage = err?.response?.data?.message || err?.message || '';
+  
+  console.log('Change question error details:', { status, errorMessage, fullError: err?.response?.data });
+  
+  // Check if it's a "no questions found" error (can be 404, 500, or specific message patterns)
+  if (status === 404 || 
+      status === 500 || 
+      errorMessage.toLowerCase().includes('no replacement questions found') ||
+      errorMessage.toLowerCase().includes('no questions found') ||
+      errorMessage.toLowerCase().includes('not found')) {
+    toastStore.showToast({
+      title: 'No Extra Questions',
+      message: "No extra question for replacement",
+      type: 'warning'
+    });
+  } else {
+    const msg = errorMessage || 'Failed to change question. Please try again later.';
+    toastStore.showToast({ title: 'Error', message: msg, type: 'error' });
+  }
 };
 
 // Restore button to original state
@@ -1963,7 +2015,7 @@ const saveUpdatedApiData = () => {
   console.log('Updated finalQuestionsDistribution in localStorage with new question');
 };
 
-// Save page functionality (placeholder)
+// Save page functionality
 const savePage = async () => {
   try {
     console.log('Saving test paper...');
@@ -1973,6 +2025,12 @@ const savePage = async () => {
     if (saveButton) {
       saveButton.disabled = true;
       saveButton.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Saving...';
+    }
+    
+    // Ensure user profile is loaded
+    if (!userProfile.value) {
+      console.log('User profile not loaded, fetching...');
+      await fetchUserProfile();
     }
     
     // Get the current test paper data
@@ -2002,14 +2060,30 @@ const savePage = async () => {
       });
     }
     
-    // Get user ID and school ID from user profile
-    const userId = userProfile.value?.id;
-    const schoolId = userProfile.value?.schools && userProfile.value.schools.length > 0 
-      ? userProfile.value.schools[0].id 
-      : null;
+    // Get user ID and school ID from user profile or localStorage
+    let userId = userProfile.value?.id;
+    let schoolId = userProfile.value?.schools?.[0]?.id;
+    
+    // If not available from userProfile, try to get from localStorage or route
+    if (!userId || !schoolId) {
+      try {
+        const savedProfile = localStorage.getItem('userProfile');
+        if (savedProfile) {
+          const profile = JSON.parse(savedProfile);
+          userId = userId || profile.id;
+          schoolId = schoolId || (profile.schools?.[0]?.id);
+        }
+        
+        // If still not available, try to get from route query
+        userId = userId || (route.query.userId ? Number(route.query.userId) : undefined);
+        schoolId = schoolId || (route.query.schoolId ? Number(route.query.schoolId) : undefined);
+      } catch (error) {
+        console.error('Error getting user profile from localStorage:', error);
+      }
+    }
       
     if (!userId || !schoolId) {
-      throw new Error('User ID or School ID not available');
+      throw new Error('User ID or School ID not available. Please ensure you are logged in properly.');
     }
     
     // Navigate to saveTestPaper page with all the necessary data
@@ -2030,7 +2104,12 @@ const savePage = async () => {
     
   } catch (error) {
     console.error('Error saving test paper:', error);
-    alert('Failed to save test paper. Please try again.');
+    const errorMessage = error instanceof Error ? error.message : 'Failed to save test paper. Please try again.';
+    toastStore.showToast({
+      title: 'Save Failed',
+      message: errorMessage,
+      type: 'error'
+    });
     
     // Reset save button
     const saveButton = document.querySelector('.btn-dark') as HTMLButtonElement;
@@ -2107,6 +2186,14 @@ onMounted(() => {
   // Add scroll event listener to hide layout selectors when scrolling
   window.addEventListener('scroll', handleLayoutSelectorsOnScroll)
   
+  // Initialize Bootstrap tooltips
+  nextTick(() => {
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+    tooltipTriggerList.forEach(tooltipTriggerEl => {
+      new (window as any).bootstrap.Tooltip(tooltipTriggerEl)
+    })
+  })
+  
   // Call handleScroll initially to set the correct visibility
   handleScroll()
   
@@ -2144,6 +2231,9 @@ const handleScroll = () => {
 
 // Add a separate loading state for change all questions
 const isChangingAllQuestions = ref(false)
+
+// Add loading state for shuffle
+const isShuffling = ref(false)
 
 // Change all questions - calls the API again to refresh all questions
 const changeAllQuestions = async () => {
@@ -2192,12 +2282,83 @@ const changeAllQuestions = async () => {
     }
   } catch (error) {
     console.error('Error changing all questions:', error);
-    // Show error message to user
-    alert('Failed to change questions. Please try again later.');
+    const err = error as any;
+    const status = err?.response?.status;
+    const errorMessage = err?.response?.data?.message || err?.message || '';
+    
+    console.log('New set error details:', { status, errorMessage, fullError: err?.response?.data });
+    
+    // Check if it's a "no questions found" error (can be 404, 500, or specific message patterns)
+    if (status === 404 || 
+        status === 500 || 
+        errorMessage.toLowerCase().includes('no replacement questions found') ||
+        errorMessage.toLowerCase().includes('no questions found') ||
+        errorMessage.toLowerCase().includes('not found')) {
+      toastStore.showToast({
+        title: 'No Extra Questions',
+        message: "No extra questions for new set",
+        type: 'warning'
+      });
+    } else {
+      const msg = errorMessage || 'Failed to change questions. Please try again later.';
+      toastStore.showToast({ title: 'Error', message: msg, type: 'error' });
+    }
   } finally {
     isChangingAllQuestions.value = false;
   }
 }
+
+// Shuffle questions within sections and MCQ options
+const shuffleQuestions = async () => {
+  isShuffling.value = true;
+  try {
+    console.log('Shuffling questions...');
+    
+    // Shuffle questions within each section
+    testPaperSections.value.forEach(section => {
+      // Shuffle the questions array within the section
+      section.questions = shuffleArray([...section.questions]);
+      
+      // Re-assign question numbers sequentially after shuffle
+      section.questions.forEach((question, index) => {
+        question.questionNumber = index + 1;
+      });
+      
+      // Shuffle MCQ options for each question
+      section.questions.forEach(question => {
+        if (question.options && question.options.length > 0) {
+          question.options = shuffleArray([...question.options]);
+        }
+      });
+    });
+    
+    console.log('Questions and options shuffled successfully!');
+    toastStore.showToast({
+      title: 'Shuffled',
+      message: 'Questions and options have been shuffled',
+      type: 'success'
+    });
+  } catch (error) {
+    console.error('Error shuffling questions:', error);
+    toastStore.showToast({
+      title: 'Error',
+      message: 'Failed to shuffle questions. Please try again.',
+      type: 'error'
+    });
+  } finally {
+    isShuffling.value = false;
+  }
+};
+
+// Helper function to shuffle an array using Fisher-Yates algorithm
+const shuffleArray = <T>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
 
 // Show global layout options
 const showGlobalLayoutOptions = (event: Event) => {

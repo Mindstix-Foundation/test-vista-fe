@@ -154,16 +154,28 @@
           <div v-if="questionsDistribution && questionsDistribution.sectionAllocations" class="mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h6 class="fw-semibold mb-0">Questions Preview</h6>
-              <button 
-                type="button" 
-                class="btn btn-outline-primary btn-sm"
-                @click="changeAllQuestions"
-                :disabled="isChangingQuestions"
-              >
-                <span v-if="isChangingQuestions" class="spinner-border spinner-border-sm me-1" role="status"></span>
-                <i v-else class="bi bi-shuffle me-1"></i>
-                Change All Questions
-              </button>
+              <div class="d-flex gap-2">
+                <button 
+                  type="button" 
+                  class="btn btn-outline-primary btn-sm"
+                  @click="changeAllQuestions"
+                  :disabled="isChangingQuestions"
+                >
+                  <span v-if="isChangingQuestions" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                  <i v-else class="bi bi-arrow-clockwise me-1"></i>
+                  New Set
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-outline-secondary btn-sm"
+                  @click="shuffleQuestions"
+                  :disabled="isShuffling"
+                >
+                  <span v-if="isShuffling" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                  <i v-else class="bi bi-shuffle me-1"></i>
+                  Shuffle
+                </button>
+              </div>
             </div>
             
             <div class="questions-container">
@@ -487,6 +499,7 @@ import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import ToastNotification from '@/components/common/ToastNotification.vue'
+import { useToastStore } from '@/stores/toast'
 
 // Define component name
 defineOptions({
@@ -531,6 +544,7 @@ const showDistribution = ref(false)
 
 // Questions changing state
 const isChangingQuestions = ref(false)
+const isShuffling = ref(false)
 
 // Toast notification state
 const showToast = ref(false)
@@ -828,6 +842,8 @@ const getAllQuestions = () => {
 }
 
 // New function to change a question
+const toastStore = useToastStore()
+
 const changeQuestion = async (index: number) => {
   console.log(`=== CHANGE QUESTION FUNCTION CALLED ===`)
   console.log(`Changing question at index: ${index}`)
@@ -984,10 +1000,76 @@ const changeQuestion = async (index: number) => {
     
   } catch (error) {
     console.error('Error changing question:', error)
-    alert(`Error changing question: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    const err: any = error
+    const status = err?.response?.status
+    const errorMessage = err?.response?.data?.message || err?.message || ''
+    
+    console.log('Change question error details:', { status, errorMessage, fullError: err?.response?.data })
+    
+    // Check if it's a "no questions found" error (can be 404, 500, or specific message patterns)
+    if (status === 404 || 
+        status === 500 || 
+        errorMessage.toLowerCase().includes('no replacement questions found') ||
+        errorMessage.toLowerCase().includes('no questions found') ||
+        errorMessage.toLowerCase().includes('not found')) {
+      toastStore.showToast({ title: 'No Extra Questions', message: "No extra question for replacement", type: 'warning' })
+    } else {
+      const msg = errorMessage || 'Failed to change question. Please try again later.'
+      toastStore.showToast({ title: 'Error', message: msg, type: 'error' })
+    }
   } finally {
     isChangingQuestions.value = false
   }
+}
+
+// Shuffle questions within sections and MCQ options
+const shuffleQuestions = async () => {
+  isShuffling.value = true
+  try {
+    console.log('Shuffling questions...')
+    
+    if (!questionsDistribution.value?.sectionAllocations) {
+      throw new Error('No questions available to shuffle')
+    }
+    
+    // Shuffle questions within each section
+    questionsDistribution.value.sectionAllocations.forEach(section => {
+      section.subsectionAllocations.forEach(subsection => {
+        if (subsection.allocatedChapters && subsection.allocatedChapters.length > 1) {
+          // Shuffle the allocated chapters array (which contains the questions)
+          subsection.allocatedChapters = shuffleArray([...subsection.allocatedChapters])
+          
+          // Shuffle MCQ options for each question
+          subsection.allocatedChapters.forEach(chapter => {
+            if (chapter.question?.question_texts?.[0]?.mcq_options) {
+              chapter.question.question_texts[0].mcq_options = shuffleArray([...chapter.question.question_texts[0].mcq_options])
+            }
+          })
+        }
+      })
+    })
+    
+    // Update localStorage with shuffled data
+    localStorage.setItem('finalQuestionsDistribution', JSON.stringify(questionsDistribution.value))
+    
+    console.log('Questions and options shuffled successfully!')
+    toastStore.showToast({ title: 'Shuffled', message: 'Questions and options have been shuffled', type: 'success' })
+  } catch (error) {
+    console.error('Error shuffling questions:', error)
+    toastStore.showToast({ title: 'Error', message: 'Failed to shuffle questions. Please try again.', type: 'error' })
+  } finally {
+    isShuffling.value = false
+  }
+}
+
+// Helper function to shuffle an array using Fisher-Yates algorithm
+const shuffleArray = <T>(array: T[]): T[] => {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
 }
 
 // *** NEW FUNCTION: Collect all question text IDs from same chapter and question type ***

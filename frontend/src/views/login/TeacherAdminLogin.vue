@@ -115,6 +115,9 @@ const login = async () => {
     return
   }
 
+  // Prevent global auth expired handler from redirecting during login
+  ;(window as any).preventAuthExpiredRedirect = true
+
   try {
     const response = await axiosInstance.post<LoginResponse>('/auth/login', {
       email_id: email.value,
@@ -141,6 +144,9 @@ const login = async () => {
     } else {
       errorMessage.value = 'An error occurred. Please try again.'
     }
+  } finally {
+    // Re-enable global handler after this request completes
+    ;(window as any).preventAuthExpiredRedirect = false
   }
 }
 

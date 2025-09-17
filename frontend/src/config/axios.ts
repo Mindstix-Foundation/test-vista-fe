@@ -55,19 +55,28 @@ axiosInstance.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      // Debounce auth expired events to prevent rapid successive calls
-      if (authExpiredTimeout) {
-        clearTimeout(authExpiredTimeout)
-      }
-      
-      authExpiredTimeout = setTimeout(() => {
-        // Clear local storage
-        safeLocalStorage.clear()
+      // Skip global handling when explicitly prevented (e.g., during login attempt)
+      const preventRedirect = (typeof window !== 'undefined') && (window as any).preventAuthExpiredRedirect === true
+      // Also skip for the login endpoint itself
+      const isLoginCall = typeof error?.config?.url === 'string' && error.config.url.includes('/auth/login')
+      // Also skip when currently on any login page route
+      const isOnLoginRoute = (typeof window !== 'undefined') && ['/login', '/teacher-admin-login', '/iti-student-login'].some((p) => window.location.pathname.includes(p))
 
-        // Dispatch a custom event that components can listen for
-        window.dispatchEvent(new CustomEvent('auth:expired'))
-        authExpiredTimeout = null
-      }, 100) as unknown as number // 100ms debounce
+      if (!preventRedirect && !isLoginCall && !isOnLoginRoute) {
+        // Debounce auth expired events to prevent rapid successive calls
+        if (authExpiredTimeout) {
+          clearTimeout(authExpiredTimeout)
+        }
+        
+        authExpiredTimeout = setTimeout(() => {
+          // Clear local storage
+          safeLocalStorage.clear()
+
+          // Dispatch a custom event that components can listen for
+          window.dispatchEvent(new CustomEvent('auth:expired'))
+          authExpiredTimeout = null
+        }, 100) as unknown as number // 100ms debounce
+      }
     }
     return Promise.reject(error instanceof Error ? error : new Error(String(error)))
   },
