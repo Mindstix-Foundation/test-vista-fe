@@ -2,9 +2,9 @@
   <div>
     <!-- Loading State -->
     <div v-if="loading || localLoading" class="text-center py-4">
-      <div class="spinner-border text-primary" role="status">
+      <output class="spinner-border text-primary">
         <span class="visually-hidden">Loading...</span>
-      </div>
+      </output>
       <p class="mt-2 text-muted">Loading enrolled students...</p>
     </div>
 
@@ -175,7 +175,7 @@
             @click="removeStudent"
             :disabled="removing"
           >
-            <span v-if="removing" class="spinner-border spinner-border-sm me-2"></span>
+            <output v-if="removing" class="spinner-border spinner-border-sm me-2"></output>
             {{ removing ? 'Removing...' : 'Remove Student' }}
           </button>
         </div>
@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onUnmounted, watch } from 'vue'
 import axiosInstance from '@/config/axios'
 import { useToastStore } from '@/stores/toast'
 
@@ -262,7 +262,7 @@ const sortedStudents = computed(() => {
     sorted.sort((a: EnrolledStudent, b: EnrolledStudent) => {
       const aRollNo = a.student_roll_number || '0'
       const bRollNo = b.student_roll_number || '0'
-      return parseInt(aRollNo) - parseInt(bRollNo)
+      return Number.parseInt(aRollNo) - Number.parseInt(bRollNo)
     })
   } else if (sortBy.value === 'name') {
     sorted.sort((a: EnrolledStudent, b: EnrolledStudent) => 
@@ -353,7 +353,7 @@ const confirmRemoveStudent = (student: EnrolledStudent) => {
   if (modalElement) {
     // Try to use Bootstrap's Modal class
     try {
-      const modal = new (window as any).bootstrap.Modal(modalElement)
+      const modal = new (globalThis as any).bootstrap.Modal(modalElement)
       modal.show()
     } catch (error) {
       console.error('Bootstrap Modal error:', error)
@@ -389,7 +389,7 @@ const removeStudent = async () => {
     const modalElement = document.getElementById('removeEnrolledStudentModal')
     if (modalElement) {
       try {
-        const modal = (window as any).bootstrap.Modal.getInstance(modalElement)
+        const modal = (globalThis as any).bootstrap.Modal.getInstance(modalElement)
         if (modal) {
           modal.hide()
         } else {

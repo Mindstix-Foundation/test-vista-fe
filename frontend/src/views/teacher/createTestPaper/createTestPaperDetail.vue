@@ -241,9 +241,9 @@
                                             <!-- Chapter selection UI -->
                                             <div v-if="activeEditQuestion && activeEditQuestion.sectionId === section.id && activeEditQuestion.questionIndex === item.number" class="chapter-selection-container mt-3">
                                               <div v-if="isLoadingQuestionTypes" class="text-center py-2">
-                                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                                <output class="spinner-border spinner-border-sm text-primary">
                                                   <span class="visually-hidden">Loading...</span>
-                                                </div>
+                                                </output>
                                                 <p class="mt-2 small">Loading available chapters...</p>
                                               </div>
                                               
@@ -258,14 +258,13 @@
                                                 </div>
                                                 
                                                 <!-- Question Types Tabs - compact version -->
-                                                <ul class="nav nav-pills nav-small mb-2" role="tablist">
-                                                  <li class="nav-item" role="presentation" v-for="(qType, index) in questionTypesAvailability" :key="qType.type">
+                                                <ul class="nav nav-pills nav-small mb-2">
+                                                  <li class="nav-item" v-for="(qType, index) in questionTypesAvailability" :key="qType.type">
                                                     <button 
                                                       class="nav-link btn-sm" 
                                                       :class="{ active: index === 0 }" 
                                                       @click="activeQuestionTypeIndex = index"
                                                       type="button" 
-                                                      role="tab"
                                                     >
                                                       {{ qType.name }}
                                                     </button>
@@ -327,9 +326,9 @@
                                             <!-- Chapter selection UI -->
                                             <div v-if="activeEditQuestion && activeEditQuestion.sectionId === section.id && activeEditQuestion.questionIndex === qType.seqencial_subquestion_number" class="chapter-selection-container mt-3">
                                               <div v-if="isLoadingQuestionTypes" class="text-center py-2">
-                                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                                <output class="spinner-border spinner-border-sm text-primary">
                                                   <span class="visually-hidden">Loading...</span>
-                                                </div>
+                                                </output>
                                                 <p class="mt-2 small">Loading available chapters...</p>
                                               </div>
                                               
@@ -344,14 +343,13 @@
                                                 </div>
                                                 
                                                 <!-- Question Types Tabs - compact version -->
-                                                <ul class="nav nav-pills nav-small mb-2" role="tablist">
-                                                  <li class="nav-item" role="presentation" v-for="(qType, index) in questionTypesAvailability" :key="qType.type">
+                                                <ul class="nav nav-pills nav-small mb-2">
+                                                  <li class="nav-item" v-for="(qType, index) in questionTypesAvailability" :key="qType.type">
                                                     <button 
                                                       class="nav-link btn-sm" 
                                                       :class="{ active: index === 0 }" 
                                                       @click="activeQuestionTypeIndex = index"
                                                       type="button" 
-                                                      role="tab"
                                                     >
                                                       {{ qType.name }}
                                                     </button>
@@ -419,7 +417,7 @@
                 type="submit"
                 class="btn btn-dark"
                 id="createTestPaperBtn"
-                :disabled="!isMarksDistributionValid || hasZeroMarksChapters || !hasGeneratedDistribution"
+                :disabled="!isMarksDistributionValid || !hasGeneratedDistribution"
                 :title="getCreateButtonTooltip()"
               >
                 <i class="bi bi-file-earmark-text me-2"></i>
@@ -861,7 +859,7 @@ const parseChaptersFromQuery = () => {
     
     // Set total marks from query params
     if (route.query.totalMarks && typeof route.query.totalMarks === 'string') {
-      totalMarks.value = parseInt(route.query.totalMarks, 10)
+      totalMarks.value = Number.parseInt(route.query.totalMarks, 10)
       
       // If only one chapter, assign all marks to it
       if (chapters.value.length === 1) {
@@ -890,9 +888,9 @@ const initializeChapterSelections = () => {
   
   // For each section, initialize the question-chapter assignments
   const sections = patternDetails.value?.sections ?? [];
-  sections.forEach(section => {
+  for (const section of sections) {
     assignChaptersToSection(section, sortedChapters);
-  });
+  }
   
   console.log('Finished initializing chapter selections');
   
@@ -954,11 +952,11 @@ const assignChaptersToSingleTypeSection = (section: PatternSection, sortedChapte
  * Assigns chapters to a section with multiple question types
  */
 const assignChaptersToMultiTypeSection = (section: PatternSection, sortedChapters: ChapterWithMarks[]) => {
-  section.subsection_question_types?.forEach(qType => {
+  for (const qType of (section.subsection_question_types ?? [])) {
     if (qType.seqencial_subquestion_number) {
       assignChapterToQuestion(section.id, qType.seqencial_subquestion_number, sortedChapters);
     }
-  });
+  }
 }
 
 /**
@@ -1016,8 +1014,8 @@ const resolveMediumIds = (): number[] => {
     const mediumIdParam = route.query.mediumId.toString();
     // Handle both single value and comma-separated values
     mediumIds = mediumIdParam.split(',')
-                 .map(id => parseInt(id.trim(), 10))
-                 .filter(id => !isNaN(id));
+                 .map(id => Number.parseInt(id.trim(), 10))
+                 .filter(id => !Number.isNaN(id));
   }
   
   // If no valid medium IDs found in route parameters, try fallback options
@@ -1026,8 +1024,8 @@ const resolveMediumIds = (): number[] => {
     
     // Try to get from user profile
     if (userProfile.value?.teaching_subjects?.[0]?.medium?.id) {
-      const mediumIdFromProfile = parseInt(userProfile.value.teaching_subjects[0].medium.id, 10);
-      if (!isNaN(mediumIdFromProfile)) {
+      const mediumIdFromProfile = Number.parseInt(userProfile.value.teaching_subjects[0].medium.id, 10);
+      if (!Number.isNaN(mediumIdFromProfile)) {
         mediumIds.push(mediumIdFromProfile);
       }
     }
@@ -1103,9 +1101,9 @@ const updateChapterMarksFromAllocation = () => {
   console.log('Updating chapter marks from allocation:', testPaperAllocation.value.chapterMarks);
   
   // For each chapter in our state, find the corresponding chapter in the allocation
-  chapters.value.forEach(chapter => {
+  for (const chapter of chapters.value) {
     updateSingleChapterMarks(chapter);
-  });
+  }
   
   // Verify total marks after update
   console.log(`Marks distribution after update: Total ${totalAssignedMarks.value}/${absoluteMarks.value}`);
@@ -1457,11 +1455,11 @@ const hasOnlyOneQuestionType = (section: PatternSection): boolean => {
     return false;
   }
   const questionTypeIds = new Set();
-  section.subsection_question_types.forEach(qType => {
+  for (const qType of section.subsection_question_types) {
     if (qType.question_type_id) {
       questionTypeIds.add(qType.question_type_id);
     }
-  });
+  }
   return questionTypeIds.size === 1;
 }
 
@@ -1542,9 +1540,7 @@ const showSuccessToast = (message: string) => {
   
   // Remove the toast after 3 seconds
   setTimeout(() => {
-    if (successToast.parentNode) {
-      document.body.removeChild(successToast);
-    }
+    successToast.remove();
   }, 3000);
 };
 
@@ -1562,15 +1558,13 @@ const showErrorToast = (message: string) => {
   
   // Remove the toast after 5 seconds
   setTimeout(() => {
-    if (errorToast.parentNode) {
-      document.body.removeChild(errorToast);
-    }
+    errorToast.remove();
   }, 5000);
 };
 
 // Validate that current marks are within range and adjust if needed
 const validateCurrentMarksAgainstRanges = () => {
-  chapters.value.forEach(chapter => {
+  for (const chapter of chapters.value) {
     const range = chapterMarksRanges.value.find(r => r.chapterId === chapter.id);
     if (range && !range.possibleMarks.includes(chapter.marks)) {
       console.log(`Chapter ${chapter.id} marks (${chapter.marks}) not in valid range, adjusting...`);
@@ -1582,7 +1576,7 @@ const validateCurrentMarksAgainstRanges = () => {
       
       chapter.marks = closestMark;
     }
-  });
+  }
 };
 
 // Method to get the next valid mark for a chapter (for increment)
@@ -1712,12 +1706,12 @@ const updateUsedQuestionsCount = () => {
   usedQuestions.value = {};
   
   // Count used questions based on selected chapters
-  Object.entries(selectedChapters.value).forEach(([, chapterId]) => {
+  for (const [, chapterId] of Object.entries(selectedChapters.value)) {
     if (!usedQuestions.value[`${chapterId}-any`]) {
       usedQuestions.value[`${chapterId}-any`] = 0;
     }
     usedQuestions.value[`${chapterId}-any`] += 1;
-  });
+  }
 };
 
 // Method to fetch question types availability
@@ -1870,9 +1864,9 @@ const initializeUsedQuestionCounts = () => {
   }
   
   // Count all used chapters and question types
-  patternDetails.value.sections.forEach(section => {
+  for (const section of patternDetails.value.sections) {
     processQuestionsForSection(section, chapterUsage);
-  });
+  }
   
   // Ensure the display is updated with the latest marks distribution
   nextTick(() => {
@@ -1944,8 +1938,8 @@ const debugChapterUsage = () => {
   
   const usage: Record<string, Record<string, {usedCount: number, specialCount: number, originalCount: number}>> = {};
   
-  questionTypesAvailability.value.forEach(questionType => {
-    questionType.chapters.forEach(chapter => {
+  for (const questionType of questionTypesAvailability.value) {
+    for (const chapter of questionType.chapters) {
       const key = `${chapter.id}-${questionType.type}`;
       const usedCount = usedQuestions.value[key] ?? 0;
       const specialCount = getSpecialCount(chapter.count, questionType.type, chapter.id);
@@ -1959,8 +1953,8 @@ const debugChapterUsage = () => {
         specialCount,
         originalCount: chapter.count
       };
-    });
-  });
+    }
+  }
   
   console.log('Chapter usage by question type:', usage);
 }
@@ -2014,8 +2008,8 @@ const refreshChapterMarksDistribution = async () => {
                     userProfile.value?.teaching_subjects?.[0]?.medium?.id ?? 
                     '1';
     
-    const mediumIds = [parseInt(mediumId.toString())];
-    const patternIdNum = parseInt(patternId);
+    const mediumIds = [Number.parseInt(mediumId.toString())];
+    const patternIdNum = Number.parseInt(patternId);
     
     console.log('refreshChapterMarksDistribution API call parameters:', {
       patternId: patternIdNum,
@@ -2167,7 +2161,7 @@ const updateChapterMarksFromDistribution = (data: TestPaperAllocation) => {
   
   // Update chapter marks
   if (data.chapterMarks) {
-    chapters.value.forEach(chapter => {
+    for (const chapter of chapters.value) {
       const chapterMark = data.chapterMarks.find(
         (cm: { chapterId: number; absoluteMarks: number; requestedMarks: number }) => 
           cm.chapterId === chapter.id
@@ -2176,7 +2170,7 @@ const updateChapterMarksFromDistribution = (data: TestPaperAllocation) => {
       if (chapterMark) {
         chapter.marks = chapterMark.absoluteMarks;
       }
-    });
+    }
   }
   
   // Update question selections based on the new allocation
@@ -2215,13 +2209,31 @@ const showWarningToast = (message: string) => {
   
   // Remove the toast after 5 seconds
   setTimeout(() => {
-    if (warningToast.parentNode) {
-      document.body.removeChild(warningToast);
-    }
+    warningToast.remove();
   }, 5000);
 };
 
 // Add a function to updateSelectedChaptersFromAllocation 
+const applyAllocatedChaptersToSelection = (section: any, subsection: any) => {
+  for (const [index, allocation] of subsection.allocatedChapters.entries()) {
+    const questionIndex = subsection.sequentialNumber || (index + 1)
+    const key = `${section.sectionId}-${questionIndex}`
+    selectedChapters.value[key] = allocation.chapterId
+    console.log(
+      `Updated section ${section.sectionId}, question ${questionIndex} to chapter ${allocation.chapterId} (${allocation.chapterName})`,
+    )
+  }
+}
+
+const refreshExpandedSectionQuestionTypes = () => {
+  const sections = patternDetails.value?.sections ?? []
+  for (const section of sections) {
+    if (questionTypesVisibility.value[section.id]) {
+      selectQuestionTypeForSection(section)
+    }
+  }
+}
+
 const updateSelectedChaptersFromAllocation = () => {
   if (!testPaperAllocation.value?.sectionAllocations) {
     console.warn('Cannot update selected chapters: No section allocations available');
@@ -2230,44 +2242,19 @@ const updateSelectedChaptersFromAllocation = () => {
   
   console.log('Updating selected chapters from allocation');
   
-  // Note: pendingAllocationUpdate flag is managed by the calling function
-  
-  // Process each section from the allocation
-  testPaperAllocation.value.sectionAllocations.forEach((section: SectionAllocation) => {
-    if (section.subsectionAllocations) {
-      // Process each subsection
-      section.subsectionAllocations.forEach((subsection: SubsectionAllocation) => {
-        if (subsection.allocatedChapters) {
-          // For each allocated chapter, update the selected chapters map
-          subsection.allocatedChapters.forEach((allocation, index) => {
-            // Get question index based on subsection sequential number if available
-            const questionIndex = subsection.sequentialNumber || (index + 1);
-            const key = `${section.sectionId}-${questionIndex}`;
-            
-            // Update the selected chapter for this section and question
-            // DIRECTLY update selectedChapters without triggering updateSelectedChapter
-            selectedChapters.value[key] = allocation.chapterId;
-            console.log(`Updated section ${section.sectionId}, question ${questionIndex} to chapter ${allocation.chapterId} (${allocation.chapterName})`);
-          });
-        }
-      });
+  for (const section of testPaperAllocation.value.sectionAllocations) {
+    if (!section.subsectionAllocations) continue
+    for (const subsection of section.subsectionAllocations) {
+      if (!subsection.allocatedChapters) continue
+      applyAllocatedChaptersToSelection(section, subsection)
     }
-  });
+  }
   
-  // Update used questions count
   updateUsedQuestionsCount();
   
-  // Trigger UI refresh for the pattern card
   setTimeout(() => {
     console.log('Pattern card UI refresh triggered');
-    // Force UI update for the pattern card sections
-    const sections = patternDetails.value?.sections ?? [];
-    sections.forEach(section => {
-      if (questionTypesVisibility.value[section.id]) {
-        // If section is already expanded, refresh its question types
-        selectQuestionTypeForSection(section);
-      }
-    });
+    refreshExpandedSectionQuestionTypes()
   }, 100);
   
   console.log('Updated selected chapters from allocation');

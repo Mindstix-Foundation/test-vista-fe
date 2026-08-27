@@ -5,9 +5,9 @@
       <div class="col-12">
         <!-- Loading state for test paper -->
         <div v-if="loadingTestPaper" class="text-center py-5">
-          <div class="spinner-border text-primary" role="status">
+          <output class="spinner-border text-primary">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-3 text-muted">Loading test paper details...</p>
         </div>
         
@@ -45,7 +45,7 @@
                 <div class="mobile-info-card">
                   <i class="bi bi-award text-success"></i>
                   <div class="info-text">
-                    <span class="info-value">{{ selectedPaper?.pattern?.total_marks }}</span>
+                    <span class="info-value">{{ selectedPaper?.total_marks ?? selectedPaper?.pattern?.total_marks }}</span>
                     <span class="info-label">marks</span>
                   </div>
                 </div>
@@ -89,7 +89,7 @@
                 <div class="col-auto">
                   <div class="info-item">
                     <i class="bi bi-award text-success"></i>
-                    <span>{{ selectedPaper?.pattern?.total_marks }} marks</span>
+                    <span>{{ selectedPaper?.total_marks ?? selectedPaper?.pattern?.total_marks }} marks</span>
                   </div>
                 </div>
                 <div class="col-auto">
@@ -198,6 +198,7 @@
                       <div class="time-inputs">
                         <div class="time-input-group">
                           <input 
+                            id="available-time-hour"
                             type="number" 
                             v-model="displayHour" 
                             min="1" 
@@ -206,11 +207,12 @@
                             placeholder="HH"
                             @input="updateDisplayTime"
                           >
-                          <label>Hour</label>
+                          <label for="available-time-hour">Hour</label>
                         </div>
                         <span class="time-separator">:</span>
                         <div class="time-input-group">
                           <input 
+                            id="available-time-minute"
                             type="number" 
                             v-model="availableTime.minute" 
                             min="0" 
@@ -219,7 +221,7 @@
                             placeholder="MM"
                             @input="updateAvailableTime"
                           >
-                          <label>Minute</label>
+                          <label for="available-time-minute">Minute</label>
                         </div>
                         <div class="ampm-toggle">
                           <button 
@@ -254,9 +256,6 @@
                 </div>
               </div>
               <small class="form-text text-muted">Format: DD-MM-YYYY HH:MM</small>
-              <!-- <small v-if="assignmentData.availableFrom" class="form-text text-success">
-                <i class="bi bi-check-circle me-1"></i>Available from: {{ formattedAvailableFrom }}
-              </small> -->
             </div>
 
             <!-- Due Date -->
@@ -331,25 +330,8 @@
                 </div>
               </div>
               <small class="form-text text-muted">Format: DD-MM-YYYY</small>
-              <!-- <small v-if="assignmentData.dueDate" class="form-text text-success">
-                <i class="bi bi-check-circle me-1"></i>Due date selected: {{ formattedDueDate }}
-              </small> -->
             </div>
 
-            <!-- Max Attempts and Time Limit -->
-            <!-- TODO: Feature to be implemented later - Max Attempts and Time Limit controls -->
-            <!-- Currently hidden but code preserved for future implementation -->
-            <div class="row mb-3" style="display: none;">
-              <div class="col-6">
-                <label for="maxAttempts" class="form-label">Max Attempts</label>
-                <input type="number" class="form-control" id="maxAttempts" v-model="assignmentData.maxAttempts" min="1" max="10">
-              </div>
-              <div class="col-6">
-                <label for="timeLimitMinutes" class="form-label">Time Limit</label>
-                <input type="number" class="form-control" id="timeLimitMinutes" v-model="assignmentData.timeLimitMinutes" min="1" placeholder="Minutes">
-                <small class="form-text text-muted d-none d-md-block">Leave empty to use default</small>
-              </div>
-            </div>
 
             <!-- Date Validation Status -->
             <div v-if="assignmentData.dueDate || assignmentData.availableFrom" class="mb-3">
@@ -376,7 +358,7 @@
                 class="btn btn-success btn-lg"
                 :disabled="loadingStudents || !hasSelectedStudents || assigningTest"
               >
-                <span v-if="assigningTest" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <output v-if="assigningTest" class="spinner-border spinner-border-sm me-2"></output>
                 <i v-else class="bi bi-person-plus me-2"></i>
                 <span class="d-none d-sm-inline">
                   {{ assigningTest ? 'Assigning...' : `Assign to ${selectedStudentsCount} Student(s)` }}
@@ -422,11 +404,41 @@
           </div>
           
           <div class="card-body d-flex flex-column">
+            <div class="mb-3 p-3 border rounded bg-light">
+              <label class="form-label small fw-semibold mb-1" for="assign-by-group">Assign by group</label>
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <select
+                  id="assign-by-group"
+                  v-model.number="selectedGroupId"
+                  class="form-select form-select-sm"
+                  style="max-width: 260px"
+                  :disabled="loadingStudents || !studentGroups.length"
+                >
+                  <option :value="0">Select a group…</option>
+                  <option v-for="g in studentGroups" :key="g.id" :value="g.id">
+                    {{ g.name }} ({{ g._count?.members ?? g.members?.length ?? 0 }})
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  class="btn btn-dark btn-sm"
+                  :disabled="!selectedGroupId || loadingStudents"
+                  @click="selectGroupMembers"
+                >
+                  Select group members
+                </button>
+                <router-link :to="{ name: 'teacherOrgGroups' }" class="btn btn-outline-secondary btn-sm">
+                  Manage groups
+                </router-link>
+              </div>
+              <div class="form-text">Selects matching assignable students below (one learner can be in many groups).</div>
+            </div>
+
             <!-- Loading indicator -->
             <div v-if="loadingStudents" class="text-center py-5 d-flex flex-column justify-content-center align-items-center flex-grow-1">
-              <div class="spinner-border text-primary" role="status">
+              <output class="spinner-border text-primary">
                 <span class="visually-hidden">Loading...</span>
-              </div>
+              </output>
               <p class="mt-3 text-muted">Loading ITI students...</p>
             </div>
             
@@ -472,14 +484,30 @@
             </div>
             
             <!-- No students message -->
-            <div v-else class="text-center py-5 d-flex flex-column justify-content-center align-items-center flex-grow-1">
+            <div v-else class="text-center py-5 d-flex flex-column justify-content-center align-items-center flex-grow-1 px-3">
               <i class="bi bi-person-x display-1 text-muted mb-3"></i>
               <h5 class="text-muted mb-2">
-                {{ assignedOnlyToggle ? 'No assigned students found for this test.' : 'No non-assigned students found for this test.' }}
+                {{ emptyStudentsTitle }}
               </h5>
               <p class="text-muted">
-                Students need to request enrollment and be approved by you before they can be assigned tests.
+                {{ emptyStudentsHint }}
               </p>
+              <div
+                v-if="showAssignableChecklist"
+                class="text-start border rounded p-3 mt-2 bg-light"
+                style="max-width: 420px; width: 100%"
+              >
+                <div class="fw-semibold mb-2">Make aspirants assignable</div>
+                <ol class="small mb-3 ps-3">
+                  <li>Create or select an exam cohort for this program</li>
+                  <li>Map teachers (Teach this cohort)</li>
+                  <li>Place learners into the cohort</li>
+                  <li>Ensure each learner is enrolled in the exam program</li>
+                </ol>
+                <router-link :to="{ name: 'teacherOrgCohorts' }" class="btn btn-dark btn-sm">
+                  Open Exam Cohorts
+                </router-link>
+              </div>
             </div>
           </div>
         </div>
@@ -497,6 +525,7 @@ import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import { useToastStore } from '@/stores/toast'
 import ToastNotification from '@/components/common/ToastNotification.vue'
+import { formatIsoDateDdMmYyyy, formatIsoDateTimeDdMmYyyy12h } from '@/utils/dateFormatters'
 
 const router = useRouter()
 const route = useRoute()
@@ -512,7 +541,10 @@ interface TestPaper {
   marks_per_question: number
   question_count: number
   duration_minutes: number
-  pattern: {
+  total_marks?: number
+  exam_category?: string
+  // Board papers only — competitive/entrance mocks have no pattern/school
+  pattern?: {
     id: number
     total_marks: number
     standard: {
@@ -523,11 +555,16 @@ interface TestPaper {
       id: number
       name: string
     }
-  }
-  school: {
+  } | null
+  school?: {
     id: number
     name: string
-  }
+  } | null
+  exam_program?: {
+    id: number
+    name: string
+    exam_body?: string
+  } | null
 }
 
 interface Student {
@@ -548,6 +585,35 @@ const removingAssignment = ref(false)
 const assignedOnlyToggle = ref(false)
 const selectAllStudents = ref(false)
 const initializingDefaults = ref(true)
+const studentGroups = ref<any[]>([])
+const selectedGroupId = ref(0)
+
+const isCompetitiveMock = computed(() => !!selectedPaper.value?.exam_program && !selectedPaper.value?.pattern)
+
+const emptyStudentsTitle = computed(() => {
+  if (assignedOnlyToggle.value) {
+    return isCompetitiveMock.value
+      ? 'No assigned aspirants found for this mock.'
+      : 'No assigned students found for this test.'
+  }
+  return isCompetitiveMock.value
+    ? 'No unassigned aspirants found for this mock.'
+    : 'No non-assigned students found for this test.'
+})
+
+const emptyStudentsHint = computed(() => {
+  if (isCompetitiveMock.value) {
+    if (assignedOnlyToggle.value) {
+      return 'No aspirants have been assigned this mock yet.'
+    }
+    return 'Org approval alone is not enough. Complete the checklist below so aspirants become assignable.'
+  }
+  return 'Students need to request enrollment and be approved by you before they can be assigned tests.'
+})
+
+const showAssignableChecklist = computed(
+  () => isCompetitiveMock.value && !assignedOnlyToggle.value && !loadingStudents.value,
+)
 
 // Helper text visibility controls
 const showAvailableFromHelp = ref(false)
@@ -581,9 +647,8 @@ const months = [
 const assignmentData = ref({
   dueDate: '',
   availableFrom: '',
-  // TODO: Features below are temporarily hidden - will be implemented later
-  maxAttempts: 1,                    // Currently hidden - Max attempts feature
-  timeLimitMinutes: null as number | null  // Currently hidden - Time limit feature
+  maxAttempts: 1,
+  timeLimitMinutes: null as number | null
 })
 
 // Set smart defaults for dates
@@ -701,37 +766,15 @@ const dateValidationStatus = computed(() => {
 
 // Date formatting computed properties
 const formattedDueDate = computed({
-  get: () => {
-    if (!assignmentData.value.dueDate) return ''
-    const date = new Date(assignmentData.value.dueDate)
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    return `${day}-${month}-${year}`
-  },
-  set: (value: string) => {
+  get: () => formatIsoDateDdMmYyyy(assignmentData.value.dueDate),
+  set: (_value: string) => {
     // This will be handled by the date picker
   }
 })
 
 const formattedAvailableFrom = computed({
-  get: () => {
-    if (!assignmentData.value.availableFrom) return ''
-    const date = new Date(assignmentData.value.availableFrom)
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    
-    // Convert to 12-hour format
-    let hour = date.getHours()
-    const minute = date.getMinutes().toString().padStart(2, '0')
-    const ampm = hour >= 12 ? 'PM' : 'AM'
-    hour = hour % 12
-    if (hour === 0) hour = 12
-    
-    return `${day}-${month}-${year} ${hour}:${minute} ${ampm}`
-  },
-  set: (value: string) => {
+  get: () => formatIsoDateTimeDdMmYyyy12h(assignmentData.value.availableFrom),
+  set: (_value: string) => {
     // This will be handled by the date picker
   }
 })
@@ -834,58 +877,75 @@ const fetchTestPaper = async () => {
   }
 }
 
+const fetchAssignedStudentIds = async (paperId: number): Promise<Set<number>> => {
+  try {
+    const assignmentsResponse = await axiosInstance.get('/test-assignments', {
+      params: { test_paper_id: paperId }
+    })
+    if (assignmentsResponse.data && Array.isArray(assignmentsResponse.data)) {
+      return new Set(assignmentsResponse.data.map((a: any) => a.student_id))
+    }
+  } catch (assignmentError) {
+    console.warn('Could not fetch existing assignments:', assignmentError)
+  }
+  return new Set<number>()
+}
+
+const applyAssignedOnlyFilter = () => {
+  if (assignedOnlyToggle.value === true) {
+    students.value = students.value.filter(student => student.isAssigned)
+  } else if (assignedOnlyToggle.value === false) {
+    students.value = students.value.filter(student => !student.isAssigned)
+  }
+}
+
+const loadStudentsForSelectedPaper = async (assignedStudentIds: Set<number>) => {
+  const paper = selectedPaper.value
+  if (!paper) return
+  if (paper.pattern && paper.school) {
+    const response = await axiosInstance.get('/student-subject-enrollments/teacher/enrolled-students', {
+      params: {
+        standard_id: paper.pattern.standard.id,
+        subject_id: paper.pattern.subject.id,
+      }
+    })
+    const enrolled = Array.isArray(response.data) ? response.data : []
+    students.value = enrolled.map((row: any) => ({
+      id: row.student_id ?? row.student?.id ?? row.id,
+      name: row.student_name ?? row.student?.user?.name ?? row.name ?? 'Unknown',
+      rollNumber: row.student_roll_number ?? row.student?.student_id ?? row.rollNumber ?? '',
+      selected: false,
+      isAssigned: assignedStudentIds.has(row.student_id ?? row.student?.id ?? row.id)
+    }))
+    return
+  }
+  if (!paper.exam_program) {
+    students.value = []
+    return
+  }
+  const response = await axiosInstance.get(
+    `/participants/assignable-students/${paper.exam_program.id}`
+  )
+  students.value = Array.isArray(response.data)
+    ? response.data.map((participant: any) => ({
+        id: participant.id,
+        name: participant.name,
+        rollNumber: participant.registration_code,
+        selected: false,
+        isAssigned: assignedStudentIds.has(participant.id)
+      }))
+    : []
+}
+
 const loadEnrolledStudents = async () => {
   try {
     loadingStudents.value = true
-    
     if (!selectedPaper.value) return
-    
-    // Use ITI students API
-    const response = await axiosInstance.get('/iti-mocktest/students', {
-      params: {
-        schoolId: selectedPaper.value.school.id,
-        standardId: selectedPaper.value.pattern.standard.id
-      }
-    })
-    
-    if (response.data && response.data.statusCode === 200 && Array.isArray(response.data.data)) {
-      // Get existing assignments for this paper to determine assignment status
-      let assignedStudentIds = new Set<number>()
-      
-      try {
-        const assignmentsResponse = await axiosInstance.get('/test-assignments', {
-          params: {
-            test_paper_id: selectedPaper.value.id
-          }
-        })
-        
-        if (assignmentsResponse.data && Array.isArray(assignmentsResponse.data)) {
-          assignedStudentIds = new Set(assignmentsResponse.data.map((a: any) => a.student_id))
-        }
-      } catch (assignmentError) {
-        console.warn('Could not fetch existing assignments:', assignmentError)
-      }
-      
-      // Transform ITI students API response to match Student interface
-      students.value = response.data.data.map((itiStudent: any) => ({
-        id: itiStudent.id,
-        name: itiStudent.user.name,
-        rollNumber: itiStudent.student_id,
-        selected: false,
-        isAssigned: assignedStudentIds.has(itiStudent.id)
-      }))
-      
-      // Filter based on assignedOnlyToggle
-      if (assignedOnlyToggle.value === true) {
-        students.value = students.value.filter(student => student.isAssigned)
-      } else if (assignedOnlyToggle.value === false) {
-        students.value = students.value.filter(student => !student.isAssigned)
-      }
-    } else {
-      students.value = []
-    }
+    const assignedStudentIds = await fetchAssignedStudentIds(selectedPaper.value.id)
+    await loadStudentsForSelectedPaper(assignedStudentIds)
+    applyAssignedOnlyFilter()
   } catch (error: any) {
-    console.error('Error loading ITI students:', error)
+    console.error('Error loading students:', error)
     students.value = []
   } finally {
     loadingStudents.value = false
@@ -918,185 +978,167 @@ const nextMonth = (type: 'due' | 'available') => {
   }
 }
 
+const sameCalendarDay = (a: Date, b: Date) =>
+  a.getDate() === b.getDate() &&
+  a.getMonth() === b.getMonth() &&
+  a.getFullYear() === b.getFullYear()
+
+const invalidDueDateReason = (type: 'due' | 'available', currentDate: Date): string => {
+  if (type !== 'due' || !assignmentData.value.availableFrom) return ''
+  const availableFromDate = new Date(assignmentData.value.availableFrom)
+  availableFromDate.setHours(0, 0, 0, 0)
+  if (currentDate < availableFromDate) {
+    return 'Due date cannot be before available from date'
+  }
+  return ''
+}
+
+const buildCalendarDateInfo = (
+  currentDate: Date,
+  pickerMonth: number,
+  type: 'due' | 'available',
+  today: Date,
+  selectedDate: Date | null,
+) => {
+  const isPastDate = currentDate < today
+  const invalidReason = invalidDueDateReason(type, currentDate)
+  const isInvalidDueDate = Boolean(invalidReason)
+  return {
+    key: `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`,
+    day: currentDate.getDate(),
+    date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
+    otherMonth: currentDate.getMonth() !== pickerMonth,
+    selected: Boolean(selectedDate && sameCalendarDay(currentDate, selectedDate)),
+    today: sameCalendarDay(currentDate, today),
+    isPastDate,
+    isInvalidDueDate,
+    disabled: isPastDate || currentDate.getMonth() !== pickerMonth || isInvalidDueDate,
+    disabledReason: invalidReason || (isPastDate ? 'Past dates cannot be selected' : '')
+  }
+}
+
 const getCalendarDates = (type: 'due' | 'available') => {
   const picker = type === 'due' ? dueDatePicker.value : availableDatePicker.value
   const firstDay = new Date(picker.year, picker.month, 1)
   const today = new Date()
-  today.setHours(0, 0, 0, 0) // Reset time for accurate comparison
-  const selectedDate = type === 'due' 
-    ? (assignmentData.value.dueDate ? new Date(assignmentData.value.dueDate) : null)
-    : (assignmentData.value.availableFrom ? new Date(assignmentData.value.availableFrom) : null)
-  
-  const dates = []
-  
-  // Calculate the start date of the calendar (first day of the week containing the first day of the month)
-  const startDate = new Date(picker.year, picker.month, 1 - firstDay.getDay())
-  
-  for (let i = 0; i < 42; i++) {
-    // Create dates using year, month, date constructor to avoid DST issues
-    const currentDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i)
-    
-    const isSelected = selectedDate && 
-      currentDate.getDate() === selectedDate.getDate() &&
-      currentDate.getMonth() === selectedDate.getMonth() &&
-      currentDate.getFullYear() === selectedDate.getFullYear()
-    
-    const isToday = currentDate.getDate() === today.getDate() &&
-      currentDate.getMonth() === today.getMonth() &&
-      currentDate.getFullYear() === today.getFullYear()
-    
-    // Check if date is in the past
-    const isPastDate = currentDate < today
-    
-    // Additional validation for due date calendar
-    let isInvalidDueDate = false
-    let invalidReason = ''
-    
-    if (type === 'due' && assignmentData.value.availableFrom) {
-      const availableFromDate = new Date(assignmentData.value.availableFrom)
-      availableFromDate.setHours(0, 0, 0, 0)
-      
-      if (currentDate < availableFromDate) {
-        isInvalidDueDate = true
-        invalidReason = 'Due date cannot be before available from date'
-      }
-    }
-    
-    const isDisabled = isPastDate || currentDate.getMonth() !== picker.month || isInvalidDueDate
-    
-    const dateInfo = {
-      key: `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`,
-      day: currentDate.getDate(),
-      date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
-      otherMonth: currentDate.getMonth() !== picker.month,
-      selected: isSelected,
-      today: isToday,
-      isPastDate: isPastDate,
-      isInvalidDueDate: isInvalidDueDate,
-      disabled: isDisabled,
-      disabledReason: invalidReason || (isPastDate ? 'Past dates cannot be selected' : '')
-    }
-    
-    dates.push(dateInfo)
+  today.setHours(0, 0, 0, 0)
+  let selectedDate: Date | null = null
+  if (type === 'due') {
+    if (assignmentData.value.dueDate) selectedDate = new Date(assignmentData.value.dueDate)
+  } else if (assignmentData.value.availableFrom) {
+    selectedDate = new Date(assignmentData.value.availableFrom)
   }
   
+  const startDate = new Date(picker.year, picker.month, 1 - firstDay.getDay())
+  const dates = []
+  for (let i = 0; i < 42; i++) {
+    const currentDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i)
+    dates.push(buildCalendarDateInfo(currentDate, picker.month, type, today, selectedDate))
+  }
   return dates
+}
+
+const availableTimeToHour24 = () => {
+  if (availableTime.value.ampm === 'PM' && availableTime.value.hour !== 12) {
+    return availableTime.value.hour + 12
+  }
+  if (availableTime.value.ampm === 'AM' && availableTime.value.hour === 12) {
+    return 0
+  }
+  return availableTime.value.hour
+}
+
+const applyDueDateSelection = (selectedDate: Date, year: number, month: number, day: number) => {
+  if (assignmentData.value.availableFrom) {
+    const availableFromDate = new Date(assignmentData.value.availableFrom)
+    availableFromDate.setHours(0, 0, 0, 0)
+    if (selectedDate < availableFromDate) {
+      const availableFromFormatted = new Date(assignmentData.value.availableFrom).toLocaleDateString('en-GB')
+      showToast('Invalid Due Date', `Due date must be on or after ${availableFromFormatted} when the test becomes available.`, 'warning')
+      return
+    }
+    const hoursDifference = (selectedDate.getTime() - availableFromDate.getTime()) / (1000 * 60 * 60)
+    if (hoursDifference < 1) {
+      showToast('Insufficient Time', 'Students need at least 1 hour to complete the test. Please select a later due date.', 'warning')
+      return
+    }
+  } else {
+    showToast('Due Date Set', 'Great! Now set when the test should become available to students.', 'info')
+  }
+  assignmentData.value.dueDate = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+  showDueDatePicker.value = false
+}
+
+const applyAvailableFromSelection = (selectedDate: Date) => {
+  if (assignmentData.value.dueDate) {
+    const dueDate = new Date(assignmentData.value.dueDate)
+    dueDate.setHours(23, 59, 59, 999)
+    if (selectedDate > dueDate) {
+      showToast('Invalid Available Date', 'Available from date cannot be later than the due date.', 'warning')
+      return
+    }
+  }
+  selectedDate.setHours(availableTimeToHour24(), availableTime.value.minute, 0, 0)
+  assignmentData.value.availableFrom = selectedDate.toISOString()
 }
 
 const selectDate = (type: 'due' | 'available', dateObj: any) => {
   if (dateObj.otherMonth || dateObj.disabled) return
   
-  // Create a new date object using the exact date components to avoid timezone issues
   const year = dateObj.date.getFullYear()
   const month = dateObj.date.getMonth()
   const day = dateObj.date.getDate()
   const selectedDate = new Date(year, month, day)
   
-  // Validate the selected date
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
   if (selectedDate < today) {
     showToast('Invalid Date', 'Cannot select a date in the past.', 'warning')
     return
   }
   
   if (type === 'due') {
-    // Additional validation for due date
-    if (assignmentData.value.availableFrom) {
-      const availableFromDate = new Date(assignmentData.value.availableFrom)
-      availableFromDate.setHours(0, 0, 0, 0)
-      
-      if (selectedDate < availableFromDate) {
-        const availableFromFormatted = new Date(assignmentData.value.availableFrom).toLocaleDateString('en-GB')
-        showToast('Invalid Due Date', `Due date must be on or after ${availableFromFormatted} when the test becomes available.`, 'warning')
-        return
-      }
-      
-      // Check if there's enough time between available from and due date
-      const timeDifference = selectedDate.getTime() - availableFromDate.getTime()
-      const hoursDifference = timeDifference / (1000 * 60 * 60)
-      
-      if (hoursDifference < 1) {
-        showToast('Insufficient Time', 'Students need at least 1 hour to complete the test. Please select a later due date.', 'warning')
-        return
-      }
-    }
-    // If available from is not set, allow due date selection but show helpful info
-    else {
-      showToast('Due Date Set', 'Great! Now set when the test should become available to students.', 'info')
-    }
-    
-    // Format date as YYYY-MM-DD to avoid timezone issues
-    const formattedDate = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
-    assignmentData.value.dueDate = formattedDate
-    showDueDatePicker.value = false
-  } else {
-    // Additional validation for available from date
-    if (assignmentData.value.dueDate) {
-      const dueDate = new Date(assignmentData.value.dueDate)
-      dueDate.setHours(23, 59, 59, 999) // End of due date
-      
-      if (selectedDate > dueDate) {
-        showToast('Invalid Available Date', 'Available from date cannot be later than the due date.', 'warning')
-        return
-      }
-    }
-    
-    // For available from, preserve the selected time
-    let hour24 = availableTime.value.hour
-    if (availableTime.value.ampm === 'PM' && availableTime.value.hour !== 12) {
-      hour24 = availableTime.value.hour + 12
-    } else if (availableTime.value.ampm === 'AM' && availableTime.value.hour === 12) {
-      hour24 = 0
-    }
-    selectedDate.setHours(hour24, availableTime.value.minute, 0, 0)
-    assignmentData.value.availableFrom = selectedDate.toISOString()
+    applyDueDateSelection(selectedDate, year, month, day)
+    return
   }
+  applyAvailableFromSelection(selectedDate)
+}
+
+const selectDueToday = (today: Date) => {
+  if (assignmentData.value.availableFrom) {
+    const availableFromDate = new Date(assignmentData.value.availableFrom)
+    availableFromDate.setHours(0, 0, 0, 0)
+    const todayDate = new Date(today)
+    todayDate.setHours(0, 0, 0, 0)
+    if (todayDate < availableFromDate) {
+      showToast('Invalid Due Date', 'Due date cannot be earlier than the available from date.', 'warning')
+      return
+    }
+  }
+  assignmentData.value.dueDate = today.toISOString().split('T')[0]
+  showDueDatePicker.value = false
+}
+
+const selectAvailableToday = (today: Date) => {
+  if (assignmentData.value.dueDate) {
+    const dueDate = new Date(assignmentData.value.dueDate)
+    dueDate.setHours(23, 59, 59, 999)
+    if (today > dueDate) {
+      showToast('Invalid Available Date', 'Available from date cannot be later than the due date.', 'warning')
+      return
+    }
+  }
+  today.setHours(availableTimeToHour24(), availableTime.value.minute, 0, 0)
+  assignmentData.value.availableFrom = today.toISOString()
 }
 
 const selectToday = (type: 'due' | 'available') => {
   const today = new Date()
-  
   if (type === 'due') {
-    // Validate due date against available from
-    if (assignmentData.value.availableFrom) {
-      const availableFromDate = new Date(assignmentData.value.availableFrom)
-      availableFromDate.setHours(0, 0, 0, 0)
-      const todayDate = new Date(today)
-      todayDate.setHours(0, 0, 0, 0)
-      
-      if (todayDate < availableFromDate) {
-        showToast('Invalid Due Date', 'Due date cannot be earlier than the available from date.', 'warning')
-        return
-      }
-    }
-    
-    assignmentData.value.dueDate = today.toISOString().split('T')[0]
-    showDueDatePicker.value = false
-  } else {
-    // Validate available from against due date
-    if (assignmentData.value.dueDate) {
-      const dueDate = new Date(assignmentData.value.dueDate)
-      dueDate.setHours(23, 59, 59, 999)
-      
-      if (today > dueDate) {
-        showToast('Invalid Available Date', 'Available from date cannot be later than the due date.', 'warning')
-        return
-      }
-    }
-    
-    // Convert 12-hour to 24-hour format
-    let hour24 = availableTime.value.hour
-    if (availableTime.value.ampm === 'PM' && availableTime.value.hour !== 12) {
-      hour24 = availableTime.value.hour + 12
-    } else if (availableTime.value.ampm === 'AM' && availableTime.value.hour === 12) {
-      hour24 = 0
-    }
-    
-    today.setHours(hour24, availableTime.value.minute, 0, 0)
-    assignmentData.value.availableFrom = today.toISOString()
+    selectDueToday(today)
+    return
   }
+  selectAvailableToday(today)
 }
 
 const selectNow = (type: 'due' | 'available') => {
@@ -1123,9 +1165,6 @@ const selectNow = (type: 'due' | 'available') => {
     const currentHour = now.getHours()
     const currentMinute = now.getMinutes()
     const ampm = currentHour >= 12 ? 'PM' : 'AM'
-    let displayHour = currentHour % 12
-    if (displayHour === 0) displayHour = 12
-    
     // Update the time picker state
     availableTime.value.hour = currentHour
     availableTime.value.minute = currentMinute
@@ -1159,16 +1198,16 @@ const confirmAvailableDateTime = () => {
 
   let selectedDateTime: Date
 
-  // If no date is selected yet, select today
-  if (!assignmentData.value.availableFrom) {
-    const today = new Date()
-    today.setHours(hour24, availableTime.value.minute, 0, 0)
-    selectedDateTime = today
-  } else {
-    // Update the existing date with current time selection
+  // If a date is already selected, update it with current time selection
+  if (assignmentData.value.availableFrom) {
     const date = new Date(assignmentData.value.availableFrom)
     date.setHours(hour24, availableTime.value.minute, 0, 0)
     selectedDateTime = date
+  } else {
+    // No date selected yet — use today
+    const today = new Date()
+    today.setHours(hour24, availableTime.value.minute, 0, 0)
+    selectedDateTime = today
   }
 
   // Validate that the selected datetime is not in the past
@@ -1261,16 +1300,52 @@ const handleClickOutside = (event: Event) => {
 
 // Student management
 const toggleAllStudents = () => {
-  filteredStudents.value.forEach(student => {
+  for (const student of filteredStudents.value) {
     student.selected = selectAllStudents.value
-  })
+  }
+}
+
+const loadStudentGroups = async () => {
+  try {
+    const { data } = await axiosInstance.get('/student-groups')
+    studentGroups.value = Array.isArray(data) ? data : []
+  } catch {
+    studentGroups.value = []
+  }
+}
+
+const selectGroupMembers = () => {
+  const group = studentGroups.value.find((g) => g.id === selectedGroupId.value)
+  if (!group) return
+  const memberStudentIds = new Set(
+    (group.members || [])
+      .map((m: any) => m.participant?.student?.id ?? m.participant?.user?.student?.id)
+      .filter((id: unknown): id is number => typeof id === 'number'),
+  )
+  let matched = 0
+  for (const s of students.value) {
+    if (memberStudentIds.has(s.id) && !s.isAssigned) {
+      s.selected = true
+      matched++
+    }
+  }
+  selectAllStudents.value = false
+  if (matched === 0) {
+    showToast(
+      'No matching students',
+      'Group members were not found in the assignable list (check cohort / enrollment).',
+      'info',
+    )
+  } else {
+    showToast('Group selected', `Selected ${matched} student(s) from ${group.name}.`, 'success')
+  }
 }
 
 const filterStudents = async () => {
   selectAllStudents.value = false
-  students.value.forEach(student => {
+  for (const student of students.value) {
     student.selected = false
-  })
+  }
   
   await loadEnrolledStudents()
 }
@@ -1339,21 +1414,6 @@ const confirmAssignment = async () => {
     return
   }
   
-  // Additional validations
-  // TODO: Uncomment when Max Attempts and Time Limit features are implemented
-  /*
-  if (assignmentData.value.maxAttempts < 1 || assignmentData.value.maxAttempts > 10) {
-    showToast('Invalid Max Attempts', 'Max attempts should be between 1 and 10.', 'warning')
-    return
-  }
-  
-  if (assignmentData.value.timeLimitMinutes !== null && 
-      (assignmentData.value.timeLimitMinutes < 1 || assignmentData.value.timeLimitMinutes > 1440)) {
-    showToast('Invalid Time Limit', 'Time limit should be between 1 and 1440 minutes (24 hours).', 'warning')
-    return
-  }
-  */
-
   const selectedStudents = filteredStudents.value.filter(s => s.selected)
   await executeAssignment(selectedStudents)
 }
@@ -1367,9 +1427,6 @@ const executeAssignment = async (selectedStudents: Student[]) => {
       student_ids: selectedStudents.map(s => s.id),
       due_date: new Date(assignmentData.value.dueDate).toISOString(),
       available_from: new Date(assignmentData.value.availableFrom).toISOString(),
-      // TODO: Uncomment when Max Attempts and Time Limit features are implemented
-      // max_attempts: assignmentData.value.maxAttempts,
-      // time_limit_minutes: assignmentData.value.timeLimitMinutes
     }
     
     const response = await axiosInstance.post('/test-assignments/bulk', assignmentPayload)
@@ -1378,10 +1435,10 @@ const executeAssignment = async (selectedStudents: Student[]) => {
       const result = response.data
       
       // Update assignment status for successfully assigned students
-      selectedStudents.forEach(student => {
+      for (const student of selectedStudents) {
         student.isAssigned = true
         student.selected = false
-      })
+      }
       
       // Show success message
       let message = `Test assigned successfully to ${result.assigned || selectedStudents.length} student(s)!`
@@ -1456,6 +1513,7 @@ const removeAssignment = async (student: Student) => {
 onMounted(() => {
   setSmartDefaults()
   fetchTestPaper()
+  loadStudentGroups()
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -1584,6 +1642,7 @@ onUnmounted(() => {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
+  animation: slideInUp 0.3s ease-out;
 }
 
 .card:hover {
@@ -2578,10 +2637,6 @@ onUnmounted(() => {
   }
 }
 
-.card {
-  animation: slideInUp 0.3s ease-out;
-}
-
 /* Loading spinner enhancement */
 .spinner-border {
   animation-duration: 0.8s;
@@ -2600,15 +2655,6 @@ onUnmounted(() => {
   .date-picker-dropdown {
     background: #2d3748;
     color: #e2e8f0;
-   
-  }
-  
-  .date-picker-header {
-  
-  }
-  
-  .time-picker-section {
-   
   }
   
   .weekday {

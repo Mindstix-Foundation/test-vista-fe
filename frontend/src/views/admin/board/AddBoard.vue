@@ -12,41 +12,21 @@ import BoardFormComponent from '@/components/forms/BoardFormComponent.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { useToastStore } from '@/store/toast'
 import axiosInstance from '@/config/axios'
-import type {
-  CreateBoardDto,
-  CreateAddressDto,
-  CreateInstructionMediumDto,
-  CreateStandardDto,
-  CreateSubjectDto,
-  CreateBoardManagementDto,
-  BoardManagementResponse,
-} from '@/models/Board'
+import { logContainerDimensions } from '@/utils/debugLayout'
 
 const router = useRouter()
 const toastStore = useToastStore()
 const isSubmitting = ref(false)
 
-const logDimensions = () => {
-  const container = document.querySelector('.board-form-container')
-  console.log('AddBoard - Window dimensions:', {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    scrollHeight: document.documentElement.scrollHeight,
-    clientHeight: document.documentElement.clientHeight,
-    bodyHeight: document.body.scrollHeight,
-    containerHeight: container?.scrollHeight,
-    hasVerticalScroll: document.documentElement.scrollHeight > window.innerHeight,
-    overflowY: window.getComputedStyle(container as Element).overflowY,
-  })
-}
+const logDimensions = () => logContainerDimensions('.board-form-container', 'AddBoard')
 
 onMounted(() => {
   logDimensions()
-  window.addEventListener('resize', logDimensions)
+  globalThis.addEventListener('resize', logDimensions)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', logDimensions)
+  globalThis.removeEventListener('resize', logDimensions)
 })
 
 interface ApiErrorResponse {
@@ -86,7 +66,7 @@ const handleBoardSubmit = async (formData: any) => {
     };
 
     // Make single API call to consolidated endpoint
-    const response = await axiosInstance.post('/board-management', boardManagementData);
+    await axiosInstance.post('/board-management', boardManagementData);
     
     toastStore.showToast('Board created successfully!', 'success');
     router.push('/admin/board');
@@ -96,9 +76,9 @@ const handleBoardSubmit = async (formData: any) => {
     
     if (error.response?.data?.message) {
       if (Array.isArray(error.response.data.message)) {
-        error.response.data.message.forEach((msg: string) => {
+        for (const msg of error.response.data.message) {
           toastStore.showToast(msg, 'error');
-        });
+        }
       } else {
         toastStore.showToast(error.response.data.message, 'error');
       }

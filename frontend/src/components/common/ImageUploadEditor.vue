@@ -34,12 +34,13 @@
         <div v-else class="editor-section">
           <div class="editor-toolbar">
             <div class="toolbar-group size-controls">
-              <label class="size-label">
+              <label class="size-label" for="imageSizeSlider">
                 <i class="bi bi-arrows-angle-expand"></i>
                 Image Size: {{ imageScale }}%
               </label>
               <div class="size-slider-container">
                 <input 
+                  id="imageSizeSlider"
                   type="range" 
                   min="10" 
                   max="100" 
@@ -116,6 +117,7 @@
                       :style="imageStyle"
                       class="preview-image"
                       ref="previewImage"
+                      alt="Question preview"
                       @load="onImageLoad"
                     />
                     <div v-else class="crop-container">
@@ -123,6 +125,7 @@
                         :src="imagePreview"
                         ref="cropImage"
                         class="crop-image"
+                        alt="Crop preview"
                       />
                     </div>
                   </div>
@@ -174,7 +177,7 @@
           @click="saveImage"
           :disabled="isUploading"
         >
-          <span v-if="isUploading" class="spinner-border spinner-border-sm me-2"></span>
+          <output v-if="isUploading" class="spinner-border spinner-border-sm me-2"></output>
           {{ isUploading ? 'Processing...' : 'Save Image' }}
         </button>
       </div>
@@ -186,7 +189,6 @@
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import Cropper from 'cropperjs'
 import '@/assets/cropper.css'
-import { useImageUploadStore } from '@/stores/imageUpload'
 
 // Props
 interface Props {
@@ -409,7 +411,7 @@ const toggleCropMode = async () => {
 const initCropper = () => {
   if (cropImage.value && !cropper.value) {
     cropper.value = new Cropper(cropImage.value, {
-      aspectRatio: NaN, // Free aspect ratio
+      aspectRatio: Number.NaN, // Free aspect ratio
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.8,
@@ -486,7 +488,7 @@ const saveImage = async () => {
     }
 
     // Generate temporary ID for local storage
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const tempId = `temp_${Date.now()}_${crypto.randomUUID()}`
 
     // Create blob URL for preview
     const blobUrl = URL.createObjectURL(finalFile)
@@ -552,7 +554,7 @@ const formatFileSize = (bytes: number): string => {
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 const increaseImageSize = () => {
@@ -612,13 +614,16 @@ const applyCrop = async () => {
 // New method for slider input
 const onScaleChange = (event: Event) => {
   const target = event.target as HTMLInputElement
-  imageScale.value = parseInt(target.value)
+  imageScale.value = Number.parseInt(target.value, 10)
 }
 
 // Method to get option label for option images
 const getOptionLabel = () => {
   const labels = ['A', 'B', 'C', 'D']
-  return labels[Math.floor(Math.random() * labels.length)] // Random for demo
+  if (props.optionIndex >= 0 && props.optionIndex < labels.length) {
+    return labels[props.optionIndex]
+  }
+  return labels[0]
 }
 
 // Method to get option text for option images

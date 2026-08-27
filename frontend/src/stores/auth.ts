@@ -89,12 +89,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   const handleAuthExpired = () => {
     // Check if we should prevent auth expired redirect (e.g., during login forms)
-    if ((window as any).preventAuthExpiredRedirect) {
+    if ((globalThis as any).preventAuthExpiredRedirect) {
       return
     }
     
     clearAuth()
-    const currentPath = window.location.pathname
+    const currentPath = globalThis.location.pathname
     if (currentPath !== '/login') {
       router.push({
         name: 'login',
@@ -151,7 +151,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Listen for auth expiration events
-  window.addEventListener('auth:expired', handleAuthExpired)
+  globalThis.addEventListener('auth:expired', handleAuthExpired)
 
   return {
     token,

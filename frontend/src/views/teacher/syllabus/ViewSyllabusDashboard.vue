@@ -108,7 +108,7 @@
               id="viewSyllabusBtn"
               :disabled="!isFormValid || isLoading"
             >
-              <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <output v-if="isLoading" class="spinner-border spinner-border-sm me-2"></output>
               View Syllabus
             </button>
           </div>

@@ -146,9 +146,9 @@
       <div class="col-md-10">
         <!-- Loading indicator -->
         <div v-if="isLoading" class="text-center my-5">
-          <div class="spinner-border" role="status">
+          <output class="spinner-border">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-3">Loading chapter details...</p>
         </div>
 

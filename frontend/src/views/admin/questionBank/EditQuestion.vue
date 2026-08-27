@@ -6,17 +6,35 @@
       </div>
       <div class="row justify-content-center align-items-center my-2">
         <div class="col col-12 col-sm-10 ">
-          <p class="text-muted text-start fs-5 m-0">
-            <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
-            <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
-          </p>
-          <div class="d-flex justify-content-between align-items-center">
-            <h4 class="fw-bolder text-start text-dark m-0 ">
-              Standard {{ questionBankData.standardName }}
-              <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
-            </h4>
-            <h4 class="fw-bolder text-uppercase mb-0" id="pageHeader">Edit Question</h4>
-          </div>
+          <template v-if="isExamScope">
+            <p class="text-muted text-start fs-5 m-0">
+              {{ questionBankData.programLabel }}
+              <span v-if="questionBankData.mediumName"> | {{ questionBankData.mediumName }}</span>
+            </p>
+            <div class="d-flex justify-content-between align-items-center">
+              <h4 class="fw-bolder text-start text-dark m-0">
+                <span v-if="questionBankData.stageName">{{ questionBankData.stageName }} | </span>
+                {{ questionBankData.subjectName || questionBankData.nodeName }}
+                <span v-if="questionBankData.chapterName"> | {{ questionBankData.chapterName }}</span>
+                <span v-if="questionBankData.topicName"> | {{ questionBankData.topicName }}</span>
+                <span class="d-block text-start text-secondary small">Competitive / Entrance syllabus</span>
+              </h4>
+              <h4 class="fw-bolder text-uppercase mb-0" id="pageHeader">Edit Question</h4>
+            </div>
+          </template>
+          <template v-else>
+            <p class="text-muted text-start fs-5 m-0">
+              <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
+              <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
+            </p>
+            <div class="d-flex justify-content-between align-items-center">
+              <h4 class="fw-bolder text-start text-dark m-0 ">
+                Standard {{ questionBankData.standardName }}
+                <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
+              </h4>
+              <h4 class="fw-bolder text-uppercase mb-0" id="pageHeader">Edit Question</h4>
+            </div>
+          </template>
         </div>
       </div>
       <hr>
@@ -29,6 +47,17 @@
           <span class="visually-hidden">Loading...</span>
         </output>
       </div>
+      <PassageGroupForm
+        v-else-if="isPassageGroup"
+        :is-edit-mode="true"
+        :saving="isSubmitting"
+        :show-pyq-toggle="true"
+        :initial-passage-text="passageInitial.passageText"
+        :initial-is-pyq="passageInitial.isPyq"
+        :initial-children="passageInitial.children"
+        @save="handleUpdatePassageGroup"
+        @cancel="handleCloseClick"
+      />
       <QuestionFormComponent
         v-else
         :isEditMode="true"
@@ -39,6 +68,7 @@
         :initialOptionImages="initialOptionImages"
         :initialOptionImageIds="initialOptionImageIds"
         :useSearchableDropdown="true"
+        :examMode="isExamScope"
         @update="handleUpdateQuestion"
         @openQuestionImageModal="openQuestionImageModal"
         @openOptionImageModal="openOptionImageModal"
@@ -85,13 +115,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import QuestionFormComponent from '@/components/forms/QuestionFormComponent.vue'
+import PassageGroupForm from '@/components/forms/PassageGroupForm.vue'
 import { useToastStore } from '@/store/toast'
 import ImageUploadEditor from '@/components/common/ImageUploadEditor.vue'
 import imageService from '@/services/imageService'
+import examCatalogService from '@/services/examCatalogService'
+import { resolveExamChapterId } from '@/utils/examSyllabus'
 
 // Define custom error type for Axios errors
 interface AxiosErrorResponse {
@@ -208,6 +241,21 @@ const initialOptions = ref<string[]>([])
 const initialCorrectOption = ref<number>(-1)
 const initialOptionImages = ref<string[]>([])
 const initialOptionImageIds = ref<(number | null)[]>([])
+const isPassageGroup = ref(false)
+const passageGroupId = ref<number | null>(null)
+const passageInitial = ref<{
+  passageText: string
+  isPyq: boolean
+  children: {
+    question_text: string
+    options: { text: string; is_correct?: boolean }[]
+    correctIndex?: number
+  }[]
+}>({
+  passageText: '',
+  isPyq: false,
+  children: [],
+})
 
 // Add new state for image upload modals
 const showQuestionImageModal = ref(false)
@@ -226,6 +274,7 @@ const currentQuestionData = ref<{
 
 // Data from localStorage
 const questionBankData = ref({
+  scope: 'board' as 'board' | 'exam',
   boardId: '',
   boardName: '',
   mediumId: '',
@@ -236,8 +285,38 @@ const questionBankData = ref({
   subjectName: '',
   chapterId: '',
   chapterName: '',
-  mediumStandardSubjectId: null
+  topicId: '',
+  topicName: '',
+  mediumStandardSubjectId: null as number | null,
+  programId: '',
+  programLabel: '',
+  stageId: '',
+  stageName: '',
+  nodeId: '',
+  nodeName: '',
 })
+
+const isExamScope = computed(() => {
+  const data = questionBankData.value
+  return data.scope === 'exam' || (!!data.programId && !!resolveExamChapterId(data))
+})
+
+function examDashboardQuery(extra: Record<string, string> = {}): Record<string, string> {
+  const q: Record<string, string> = {
+    scope: 'exam',
+    programId: String(questionBankData.value.programId),
+    chapterId: String(questionBankData.value.chapterId || resolveExamChapterId(questionBankData.value) || ''),
+    ...extra,
+  }
+  if (questionBankData.value.stageId) q.stageId = String(questionBankData.value.stageId)
+  if (questionBankData.value.subjectId) q.subjectId = String(questionBankData.value.subjectId)
+  if (questionBankData.value.topicId) q.topicId = String(questionBankData.value.topicId)
+  if (questionBankData.value.mediumId) {
+    q.mediumId = String(questionBankData.value.mediumId)
+    if (questionBankData.value.mediumName) q.mediumName = questionBankData.value.mediumName
+  }
+  return q
+}
 
 // Add a ref to store the existing MCQ options and match pairs to avoid unnecessary API calls
 const existingMcqOptions = ref<ExistingMCQOption[]>([])
@@ -736,11 +815,16 @@ async function handleUpdateQuestion(payload: {
     // Navigate back to question dashboard with success query param
     router.push({
       name: 'questionDashboard',
-      query: {
-        success: 'true',
-        message: 'Question updated successfully',
-        unverified: 'true'
-      }
+      query: isExamScope.value
+        ? examDashboardQuery({
+            success: 'true',
+            message: 'Question updated successfully',
+          })
+        : {
+            success: 'true',
+            message: 'Question updated successfully',
+            unverified: 'true',
+          },
     });
   } catch (error: unknown) {
     // Hide loading overlay
@@ -764,9 +848,7 @@ function handleCloseClick() {
   // Navigate with query parameters
   router.push({
     name: 'questionDashboard',
-    query: {
-      unverified: 'true'
-    }
+    query: isExamScope.value ? examDashboardQuery() : { unverified: 'true' },
   });
 }
 
@@ -796,19 +878,19 @@ function processMcqQuestionData(response: QuestionResponse) {
 
   // Find the correct option index
   const correctIndex = options.findIndex(opt => opt.is_correct === true);
-  initialCorrectOption.value = correctIndex !== -1 ? correctIndex : -1;
+  initialCorrectOption.value = correctIndex;
 
   // Extract option image URLs and IDs
-  initialOptionImages.value = Array(options.length).fill('');
-  initialOptionImageIds.value = Array(options.length).fill(null);
+  initialOptionImages.value = new Array(options.length).fill('');
+  initialOptionImageIds.value = new Array(options.length).fill(null);
 
   // Process each option to extract image data
-  options.forEach((option, index) => {
+  for (const [index, option] of options.entries()) {
     if (option?.image?.presigned_url) {
       initialOptionImages.value[index] = option.image.presigned_url;
       initialOptionImageIds.value[index] = option.image.id;
     }
-  });
+  }
 
   console.log('Initialized MCQ options:', initialOptions.value);
   console.log('Correct option index:', initialCorrectOption.value);
@@ -839,12 +921,107 @@ function processMatchPairsData(response: QuestionResponse) {
   console.log('Stored match pairs:', existingMatchPairs.value);
 }
 
+async function loadPassageGroup(groupId: number) {
+  const group = await examCatalogService.getPassageGroup(groupId)
+  passageGroupId.value = group.id
+  isPassageGroup.value = true
+  passageInitial.value = {
+    passageText: group.passage_text || '',
+    isPyq: !!(group.children?.[0]?.board_question),
+    children: (group.children || []).map((child: any) => {
+      const qt = child.question_texts?.[0]
+      const options = (qt?.mcq_options || []).map((opt: any) => ({
+        text: opt.option_text || '',
+        is_correct: !!opt.is_correct,
+      }))
+      return {
+        question_text: qt?.question_text || '',
+        options,
+        correctIndex: Math.max(0, options.findIndex((o: { is_correct?: boolean }) => o.is_correct)),
+      }
+    }),
+  }
+}
+
+async function handleUpdatePassageGroup(payload: {
+  passage_text: string
+  is_pyq: boolean
+  children: {
+    question_text: string
+    options: { text: string; is_correct: boolean }[]
+    group_order: number
+  }[]
+}) {
+  if (!passageGroupId.value) return
+  try {
+    isSubmitting.value = true
+    const nodeId = Number(
+      questionBankData.value.nodeId ||
+        questionBankData.value.topicId ||
+        questionBankData.value.chapterId ||
+        resolveExamChapterId(questionBankData.value) ||
+        0,
+    )
+    const topicId = Number(questionBankData.value.topicId || 0)
+    await examCatalogService.updatePassageGroup(passageGroupId.value, {
+      passage_text: payload.passage_text,
+      board_question: payload.is_pyq,
+      ...(isExamScope.value && nodeId ? { syllabus_node_id: nodeId } : {}),
+      ...(!isExamScope.value && topicId ? { question_topic_data: { topic_id: topicId } } : {}),
+      children: payload.children.map((child) => ({
+        question_text: child.question_text,
+        group_order: child.group_order,
+        mcq_options: child.options.map((opt) => ({
+          option_text: opt.text,
+          is_correct: opt.is_correct,
+        })),
+      })),
+    })
+    localStorage.setItem('questionDashboardSort', 'updated_at_desc')
+    toastStore.showToast({
+      title: 'Success',
+      message: 'Passage group updated successfully',
+      type: 'success',
+    })
+    router.push({
+      name: 'questionDashboard',
+      query: isExamScope.value
+        ? examDashboardQuery({
+            success: 'true',
+            message: 'Passage group updated successfully',
+          })
+        : {
+            success: 'true',
+            message: 'Passage group updated successfully',
+            unverified: 'true',
+          },
+    })
+  } catch (error: unknown) {
+    const axiosError = error as AxiosErrorResponse
+    toastStore.showToast({
+      title: 'Error',
+      message: axiosError.response?.data?.message ?? 'Failed to update passage group',
+      type: 'error',
+    })
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
 // Handle question data fetching
 async function fetchQuestionData(id: number) {
   try {
     // Fetch question data to initialize the form
     const response = await axiosInstance.get(`/questions/${id}`);
     console.log('Question data:', response.data);
+    const data = response.data?.data ?? response.data
+    const groupId = data?.question_group_id ?? data?.question_group?.id ?? null
+
+    if (groupId) {
+      await loadPassageGroup(Number(groupId))
+      isLoading.value = false
+      return
+    }
 
     // Process different question types
     processMcqQuestionData(response);
@@ -878,7 +1055,7 @@ onMounted(async () => {
 
   // Get the question ID from the route params
   if (route.params.id) {
-    questionId.value = parseInt(route.params.id as string);
+    questionId.value = Number.parseInt(route.params.id as string, 10);
     await fetchQuestionData(questionId.value);
   } else {
     // Redirect back to dashboard if no question ID
@@ -928,7 +1105,7 @@ function handleQuestionImageCancelled() {
   showQuestionImageModal.value = false
   
   // Emit a custom event that the QuestionFormComponent can listen to
-  window.dispatchEvent(new CustomEvent('clearQuestionImage'))
+  globalThis.dispatchEvent(new CustomEvent('clearQuestionImage'))
 }
 
 function handleOptionImageCancelled() {
@@ -938,7 +1115,7 @@ function handleOptionImageCancelled() {
   const event = new CustomEvent('clearOptionImage', { 
     detail: { optionIndex: currentOptionIndex.value } 
   });
-  window.dispatchEvent(event);
+  globalThis.dispatchEvent(event);
 }
 </script>
 

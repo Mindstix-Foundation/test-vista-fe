@@ -24,12 +24,12 @@
               </div>
 
               <!-- Question Image Section -->
-              <div class="mb-4">
-                <label class="form-label">Question Image</label>
+              <fieldset class="mb-4 border-0 p-0">
+                <legend class="form-label float-none w-auto">Question photo</legend>
                 <div class="image-upload-section">
                   <div v-if="questionImage" class="current-image mb-3">
                     <div class="image-preview-card">
-                      <img :src="questionImage.url" alt="Question Image" class="img-fluid" />
+                      <img :src="questionImage.url" alt="Question preview" class="img-fluid" />
                       <div class="image-info">
                         <small class="text-muted">
                           {{ questionImage.metadata.width }} × {{ questionImage.metadata.height }}px | 
@@ -64,11 +64,11 @@
                     <i class="bi bi-cloud-upload"></i> Upload Question Image
                   </button>
                 </div>
-              </div>
+              </fieldset>
 
               <!-- MCQ Options Example -->
-              <div class="mb-4">
-                <label class="form-label">MCQ Options</label>
+              <fieldset class="mb-4 border-0 p-0">
+                <legend class="form-label float-none w-auto">MCQ Options</legend>
                 <div class="row g-3">
                   <div v-for="(option, index) in mcqOptions" :key="index" class="col-md-6">
                     <div class="option-container">
@@ -78,9 +78,9 @@
                           v-model="option.text" 
                           type="text" 
                           class="form-control"
-                          :placeholder="`Option ${String.fromCharCode(65 + index)}`"
+                          :placeholder="`Option ${String.fromCodePoint(65 + index)}`"
                         />
-                        <label :for="`option${index}`">Option {{ String.fromCharCode(65 + index) }}</label>
+                        <label :for="`option${index}`">Option {{ String.fromCodePoint(65 + index) }}</label>
                       </div>
                       
                       <div class="form-check mb-2">
@@ -101,7 +101,7 @@
                       <div class="option-image-section">
                         <div v-if="option.image" class="current-image mb-2">
                           <div class="image-preview-card small">
-                            <img :src="option.image.url" alt="Option Image" class="img-fluid" />
+                            <img :src="option.image.url" alt="Option preview" class="img-fluid" />
                             <div class="image-actions">
                               <button 
                                 type="button" 
@@ -133,12 +133,12 @@
                     </div>
                   </div>
                 </div>
-              </div>
+              </fieldset>
 
               <!-- Submit Button -->
               <div class="text-center">
                 <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-                  <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2"></span>
+                  <output v-if="isSubmitting" class="spinner-border spinner-border-sm me-2"></output>
                   {{ isSubmitting ? 'Saving...' : 'Save Question' }}
                 </button>
               </div>
@@ -171,7 +171,7 @@
                 <div class="uploaded-image-card">
                   <img :src="option.image!.url" alt="Option" class="img-fluid" />
                   <div class="p-2">
-                    <h6 class="mb-1">Option {{ String.fromCharCode(65 + index) }}</h6>
+                    <h6 class="mb-1">Option {{ String.fromCodePoint(65 + index) }}</h6>
                     <small class="text-muted">ID: {{ option.image!.id }}</small>
                   </div>
                 </div>
@@ -362,7 +362,7 @@ const handleImageUploaded = (imageData: UploadedImage) => {
     showToast('Success', 'Question image uploaded successfully!', 'success')
   } else if (type === 'option' && index !== undefined) {
     mcqOptions.value[index].image = imageData
-    showToast('Success', `Option ${String.fromCharCode(65 + index)} image uploaded successfully!`, 'success')
+    showToast('Success', `Option ${String.fromCodePoint(65 + index)} image uploaded successfully!`, 'success')
   }
 
   closeImageUploader()
@@ -379,7 +379,7 @@ const removeQuestionImage = () => {
 
 const removeOptionImage = (index: number) => {
   mcqOptions.value[index].image = undefined
-  showToast('Info', `Option ${String.fromCharCode(65 + index)} image removed`, 'info')
+  showToast('Info', `Option ${String.fromCodePoint(65 + index)} image removed`, 'info')
 }
 
 const handleSubmit = async () => {
@@ -406,6 +406,7 @@ const handleSubmit = async () => {
     // Reset form
     resetForm()
   } catch (error) {
+    console.error(error)
     showToast('Error', 'Failed to save question. Please try again.', 'error')
   } finally {
     isSubmitting.value = false
@@ -429,7 +430,7 @@ const formatFileSize = (bytes: number): string => {
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // Toast methods

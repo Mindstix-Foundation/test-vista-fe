@@ -57,9 +57,9 @@
         <div id="testPaperCards">
           <!-- Loading indicator -->
           <div v-if="isLoading" class="text-center my-5">
-            <div class="spinner-border" role="status">
+            <output class="spinner-border">
               <span class="visually-hidden">Loading...</span>
-            </div>
+            </output>
             <p class="mt-3">Loading test papers...</p>
           </div>
 
@@ -145,7 +145,7 @@
                     @click="confirmDeleteTestPaper(paper)"
                     :disabled="isDeleting"
                   >
-                    <span v-if="isDeleting && deletingPaperId === paper.id" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    <output v-if="isDeleting && deletingPaperId === paper.id" class="spinner-border spinner-border-sm me-2"></output>
                     <i v-else class="bi bi-trash me-1"></i> 
                     {{ isDeleting && deletingPaperId === paper.id ? 'Deleting...' : 'Delete' }}
                   </button>
@@ -250,7 +250,7 @@
               @click="deleteTestPaper"
               :disabled="isDeleting || !isDeleteConfirmationValid"
             >
-              <span v-if="isDeleting" class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <output v-if="isDeleting" class="spinner-border spinner-border-sm me-2"></output>
               <i v-else class="bi bi-trash me-2"></i>
               {{ isDeleting ? 'Deleting...' : 'Delete Test Paper' }}
             </button>
@@ -401,7 +401,7 @@ const formatExamTime = (examTimeString: string) => {
   try {
     const examTime = new Date(examTimeString);
     // Check if the date is valid
-    if (isNaN(examTime.getTime())) return 'N/A';
+    if (Number.isNaN(examTime.getTime())) return 'N/A';
     
     // Simple way to format the hours and minutes
     const hours = examTime.getHours();
@@ -409,15 +409,15 @@ const formatExamTime = (examTimeString: string) => {
     
     // If both hours and minutes are available
     if (hours > 0 && minutes > 0) {
-      return `${hours} Hour${hours !== 1 ? 's' : ''} ${minutes} Minute${minutes !== 1 ? 's' : ''}`;
+      return `${hours} Hour${hours === 1 ? '' : 's'} ${minutes} Minute${minutes === 1 ? '' : 's'}`;
     } 
     // If only hours are available
     else if (hours > 0) {
-      return `${hours} Hour${hours !== 1 ? 's' : ''}`;
+      return `${hours} Hour${hours === 1 ? '' : 's'}`;
     } 
     // If only minutes are available
     else if (minutes > 0) {
-      return `${minutes} Minute${minutes !== 1 ? 's' : ''}`;
+      return `${minutes} Minute${minutes === 1 ? '' : 's'}`;
     }
     
     return 'N/A';

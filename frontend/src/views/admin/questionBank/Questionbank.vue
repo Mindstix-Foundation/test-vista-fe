@@ -10,8 +10,36 @@
       <hr />
     </div>
 
+    <!-- Scope: school board vs competitive/entrance -->
+    <div class="row p-2 justify-content-center mb-3">
+      <div class="col-12 col-sm-10 col-md-8">
+        <ul class="nav nav-tabs category-tabs">
+          <li class="nav-item">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: questionScope === 'board' }"
+              @click="questionScope = 'board'"
+            >
+              School Board
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: questionScope === 'exam' }"
+              @click="questionScope = 'exam'"
+            >
+              Competitive / Entrance
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
     <div class="row gy-2 g-3 justify-content-center">
-      <form id="viewQuestionForm" @submit.prevent="viewQuestions">
+      <form v-if="questionScope === 'board'" id="viewQuestionForm" @submit.prevent="viewQuestions">
         <div class="row gy-2 justify-content-center">
           <div class="col-12 col-sm-10 col-md-8">
             <!-- Board Selection -->
@@ -125,15 +153,140 @@
           </div>
         </div>
       </form>
+
+      <form v-else id="viewExamQuestionForm" @submit.prevent="viewExamQuestions">
+        <div class="row gy-2 justify-content-center">
+          <div class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <SearchableDropdown
+                id="filterExamProgram"
+                label="Exam"
+                placeholder="Search for exam (UPSC, JEE, NEET...)"
+                :items="examPrograms"
+                v-model="selectedExamProgram"
+                :search-keys="['name', 'label']"
+                label-key="label"
+                required
+                @change="handleExamProgramChange"
+              >
+                <template #label>Exam Program <span class="text-danger">*</span></template>
+                <template #item="{ item }">{{ item.label }}</template>
+              </SearchableDropdown>
+            </div>
+          </div>
+          <div class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <SearchableDropdown
+                id="filterExamLanguage"
+                label="Language"
+                placeholder="Select language (English, Hindi, Marathi…)"
+                :items="examLanguages"
+                v-model="selectedExamLanguage"
+                :search-keys="['name', 'code']"
+                label-key="name"
+                required
+              >
+                <template #label>Language <span class="text-danger">*</span></template>
+                <template #item="{ item }">{{ item.name }}</template>
+              </SearchableDropdown>
+            </div>
+          </div>
+          <div class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <SearchableDropdown
+                id="filterExamStage"
+                label="Stage"
+                placeholder="Select exam stage"
+                :items="examStages"
+                v-model="selectedExamStage"
+                :search-keys="['name']"
+                label-key="name"
+                :disabled="!selectedExamProgram || loadingExamSyllabus"
+                :required="examStages.length > 0"
+                @change="handleExamStageChange"
+              >
+                <template #label>Stage <span v-if="examStages.length" class="text-danger">*</span></template>
+              </SearchableDropdown>
+            </div>
+          </div>
+          <div class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <SearchableDropdown
+                id="filterExamSubject"
+                label="Subject"
+                placeholder="Select subject"
+                :items="examSubjects"
+                v-model="selectedExamSubject"
+                :search-keys="['name']"
+                label-key="name"
+                :disabled="!selectedExamProgram || loadingExamSyllabus || (examStages.length > 0 && !selectedExamStage)"
+                required
+                @change="handleExamSubjectChange"
+              >
+                <template #label>Subject <span class="text-danger">*</span></template>
+              </SearchableDropdown>
+            </div>
+          </div>
+          <div class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <SearchableDropdown
+                id="filterExamChapter"
+                label="Chapter"
+                placeholder="Select chapter"
+                :items="examChapters"
+                v-model="selectedExamChapter"
+                :search-keys="['name']"
+                label-key="name"
+                :disabled="!selectedExamSubject || loadingExamSyllabus"
+                required
+                @change="handleExamChapterChange"
+              >
+                <template #label>Chapter <span class="text-danger">*</span></template>
+              </SearchableDropdown>
+            </div>
+          </div>
+          <div class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <SearchableDropdown
+                id="filterExamTopic"
+                label="Topic"
+                placeholder="All topics in chapter (optional)"
+                :items="examTopics"
+                v-model="selectedExamTopic"
+                :search-keys="['name']"
+                label-key="name"
+                :disabled="!selectedExamChapter || loadingExamSyllabus || examTopics.length === 0"
+              >
+                <template #label>
+                  Topic
+                  <span v-if="examTopics.length" class="text-muted small">(optional)</span>
+                </template>
+              </SearchableDropdown>
+            </div>
+          </div>
+          <div class="col-12 col-sm-10 col-md-8 text-end">
+            <button
+              type="submit"
+              class="btn btn-dark mt-3"
+              :disabled="!isExamFormValid || loadingExamSyllabus"
+            >
+              View Questions
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
+import { examCatalogService } from '@/services/examCatalogService'
+import type { ExamProgram, ExamStage, ExamSyllabusItem, Language } from '@/types/exam'
+import { collectStageSubjects, getChildItems } from '@/utils/examSyllabus'
 
 // Component name (for linter)
 defineOptions({
@@ -176,6 +329,23 @@ interface Chapter {
 }
 
 const router = useRouter()
+const route = useRoute()
+
+const questionScope = ref<'board' | 'exam'>('board')
+const examPrograms = ref<Array<ExamProgram & { label: string }>>([])
+const selectedExamProgram = ref<(ExamProgram & { label: string }) | null>(null)
+const examStages = ref<ExamStage[]>([])
+const selectedExamStage = ref<ExamStage | null>(null)
+const examSubjects = ref<ExamSyllabusItem[]>([])
+const selectedExamSubject = ref<ExamSyllabusItem | null>(null)
+const examChapters = ref<ExamSyllabusItem[]>([])
+const selectedExamChapter = ref<ExamSyllabusItem | null>(null)
+const examTopics = ref<ExamSyllabusItem[]>([])
+const selectedExamTopic = ref<ExamSyllabusItem | null>(null)
+const examSyllabusTree = ref<ExamSyllabusItem[]>([])
+const loadingExamSyllabus = ref(false)
+const examLanguages = ref<Language[]>([])
+const selectedExamLanguage = ref<Language | null>(null)
 
 // Data
 const boards = ref<Board[]>([])
@@ -191,7 +361,6 @@ const selectedStandard = ref<Standard | null>(null)
 const selectedSubject = ref<Subject | null>(null)
 const selectedChapter = ref<Chapter | null>(null)
 
-// Computed
 const isFormValid = computed(() => {
   return (
     selectedBoard.value !== null &&
@@ -201,6 +370,233 @@ const isFormValid = computed(() => {
     selectedChapter.value !== null
   )
 })
+
+const isExamFormValid = computed(() => {
+  const stageOk = examStages.value.length === 0 || selectedExamStage.value !== null
+  return (
+    selectedExamProgram.value !== null &&
+    selectedExamSubject.value !== null &&
+    selectedExamChapter.value !== null &&
+    selectedExamLanguage.value !== null &&
+    !!selectedExamLanguage.value.instruction_medium_id &&
+    stageOk
+  )
+})
+
+async function loadExamLanguages() {
+  try {
+    examLanguages.value = await examCatalogService.getLanguages()
+  } catch (error) {
+    console.error('Error fetching exam languages:', error)
+    examLanguages.value = []
+  }
+}
+
+function refreshExamSubjects() {
+  if (!selectedExamProgram.value) {
+    examSubjects.value = []
+    return
+  }
+  examSubjects.value = collectStageSubjects(examSyllabusTree.value, selectedExamStage.value?.id ?? null)
+}
+
+function refreshExamChapters() {
+  if (!selectedExamSubject.value) {
+    examChapters.value = []
+    return
+  }
+  examChapters.value = getChildItems(examSyllabusTree.value, selectedExamSubject.value.id, 'CHAPTER')
+}
+
+function refreshExamTopics() {
+  if (!selectedExamChapter.value) {
+    examTopics.value = []
+    return
+  }
+  examTopics.value = getChildItems(examSyllabusTree.value, selectedExamChapter.value.id, 'TOPIC')
+}
+
+async function handleExamProgramChange() {
+  selectedExamStage.value = null
+  selectedExamSubject.value = null
+  selectedExamChapter.value = null
+  selectedExamTopic.value = null
+  examStages.value = []
+  examSubjects.value = []
+  examChapters.value = []
+  examTopics.value = []
+  examSyllabusTree.value = []
+  if (!selectedExamProgram.value) return
+
+  loadingExamSyllabus.value = true
+  try {
+    const [stages, tree] = await Promise.all([
+      examCatalogService.getStages(selectedExamProgram.value.id),
+      examCatalogService.getSyllabusTree(selectedExamProgram.value.id),
+    ])
+    examStages.value = stages
+    examSyllabusTree.value = tree
+    if (stages.length === 1) {
+      selectedExamStage.value = stages[0]
+    }
+    refreshExamSubjects()
+  } catch (error) {
+    console.error('Error loading exam syllabus:', error)
+    examStages.value = []
+    examSyllabusTree.value = []
+  } finally {
+    loadingExamSyllabus.value = false
+  }
+}
+
+function handleExamStageChange() {
+  selectedExamSubject.value = null
+  selectedExamChapter.value = null
+  selectedExamTopic.value = null
+  examChapters.value = []
+  examTopics.value = []
+  refreshExamSubjects()
+}
+
+function handleExamSubjectChange() {
+  selectedExamChapter.value = null
+  selectedExamTopic.value = null
+  examTopics.value = []
+  refreshExamChapters()
+}
+
+function handleExamChapterChange() {
+  selectedExamTopic.value = null
+  refreshExamTopics()
+}
+
+function applyExamLanguageFromQuery(languageId: unknown, mediumId: unknown) {
+  if (!examLanguages.value.length) return
+  if (languageId) {
+    selectedExamLanguage.value =
+      examLanguages.value.find((l) => String(l.id) === String(languageId)) ?? null
+    return
+  }
+  if (!mediumId) return
+  selectedExamLanguage.value =
+    examLanguages.value.find((l) => String(l.instruction_medium_id) === String(mediumId)) ??
+    examLanguages.value.find(
+      (l) => l.name.toLowerCase() === String(route.query.mediumName ?? '').toLowerCase(),
+    ) ??
+    null
+}
+
+function applyExamHierarchyFromQuery(stageId: unknown, subjectId: unknown, chapterId: unknown, topicId: unknown) {
+  if (stageId && examStages.value.length) {
+    selectedExamStage.value = examStages.value.find((s) => String(s.id) === String(stageId)) ?? null
+    refreshExamSubjects()
+  }
+  if (subjectId) {
+    selectedExamSubject.value =
+      examSubjects.value.find((s) => String(s.id) === String(subjectId)) ?? null
+    refreshExamChapters()
+  }
+  if (chapterId) {
+    selectedExamChapter.value =
+      examChapters.value.find((c) => String(c.id) === String(chapterId)) ?? null
+    refreshExamTopics()
+  }
+  if (topicId) {
+    selectedExamTopic.value =
+      examTopics.value.find((t) => String(t.id) === String(topicId)) ?? null
+  }
+}
+
+function applyStoredExamLanguage(parsed: Record<string, any>) {
+  if (selectedExamLanguage.value || !examLanguages.value.length) return
+  if (parsed.languageId) {
+    selectedExamLanguage.value =
+      examLanguages.value.find((l) => String(l.id) === String(parsed.languageId)) ?? null
+    return
+  }
+  if (!parsed.mediumId) return
+  selectedExamLanguage.value =
+    examLanguages.value.find(
+      (l) => String(l.instruction_medium_id) === String(parsed.mediumId),
+    ) ??
+    examLanguages.value.find(
+      (l) => l.name.toLowerCase() === String(parsed.mediumName ?? '').toLowerCase(),
+    ) ??
+    null
+}
+
+function applyStoredExamHierarchy(parsed: Record<string, any>) {
+  if (!selectedExamStage.value && parsed.stageId && examStages.value.length) {
+    selectedExamStage.value =
+      examStages.value.find((s) => String(s.id) === String(parsed.stageId)) ?? null
+    refreshExamSubjects()
+  }
+  if (!selectedExamSubject.value && parsed.subjectId) {
+    selectedExamSubject.value =
+      examSubjects.value.find((s) => String(s.id) === String(parsed.subjectId)) ?? null
+    refreshExamChapters()
+  }
+  if (!selectedExamChapter.value && (parsed.chapterId || parsed.nodeId)) {
+    const cid = parsed.chapterId ?? parsed.nodeId
+    selectedExamChapter.value =
+      examChapters.value.find((c) => String(c.id) === String(cid)) ?? null
+    refreshExamTopics()
+  }
+  if (!selectedExamTopic.value && parsed.topicId) {
+    selectedExamTopic.value =
+      examTopics.value.find((t) => String(t.id) === String(parsed.topicId)) ?? null
+  }
+}
+
+function applyStoredExamSelections() {
+  const storedData = localStorage.getItem('questionBank')
+  if (!storedData) return
+  try {
+    const parsed = JSON.parse(storedData)
+    applyStoredExamLanguage(parsed)
+    applyStoredExamHierarchy(parsed)
+  } catch {
+    // ignore invalid localStorage
+  }
+}
+
+async function preselectExamFromQuery() {
+  const scope = route.query.scope
+  const programId = route.query.programId
+  const chapterId = route.query.chapterId ?? route.query.nodeId
+  const topicId = route.query.topicId
+  const stageId = route.query.stageId
+  const subjectId = route.query.subjectId
+  const languageId = route.query.languageId
+  const mediumId = route.query.mediumId
+  if (scope !== 'exam' || !programId) return
+
+  questionScope.value = 'exam'
+  const match = examPrograms.value.find((p) => String(p.id) === String(programId))
+  if (!match) return
+
+  selectedExamProgram.value = match
+  await handleExamProgramChange()
+  applyExamLanguageFromQuery(languageId, mediumId)
+  applyExamHierarchyFromQuery(stageId, subjectId, chapterId, topicId)
+  applyStoredExamSelections()
+}
+
+async function loadExamPrograms() {
+  try {
+    const [entrance, competitive] = await Promise.all([
+      examCatalogService.getPrograms({ category: 'ENTRANCE' }),
+      examCatalogService.getPrograms({ category: 'COMPETITIVE' }),
+    ])
+    examPrograms.value = [...entrance, ...competitive].map((program) => ({
+      ...program,
+      label: `${program.exam_body?.abbreviation ?? ''} — ${program.name}`.trim(),
+    }))
+  } catch (error) {
+    console.error('Error fetching exam programs:', error)
+    examPrograms.value = []
+  }
+}
 
 // Methods
 const fetchBoards = async () => {
@@ -367,6 +763,7 @@ const viewQuestions = () => {
 
   // Store selected values in localStorage or state management
   localStorage.setItem('questionBank', JSON.stringify({
+    scope: 'board',
     boardId: selectedBoard.value?.id,
     boardName: selectedBoard.value?.name ?? '',
     mediumId: selectedMedium.value?.id,
@@ -384,13 +781,121 @@ const viewQuestions = () => {
   router.push({ name: 'questionDashboard' })
 }
 
+const viewExamQuestions = () => {
+  if (
+    !isExamFormValid.value ||
+    !selectedExamProgram.value ||
+    !selectedExamChapter.value ||
+    !selectedExamLanguage.value?.instruction_medium_id
+  ) {
+    return
+  }
+
+  const leafNode = selectedExamTopic.value ?? selectedExamChapter.value
+  const language = selectedExamLanguage.value
+
+  localStorage.setItem(
+    'questionBank',
+    JSON.stringify({
+      scope: 'exam',
+      programId: selectedExamProgram.value.id,
+      programLabel: selectedExamProgram.value.label,
+      stageId: selectedExamStage.value?.id ?? null,
+      stageName: selectedExamStage.value?.name ?? '',
+      subjectId: selectedExamSubject.value?.id,
+      subjectName: selectedExamSubject.value?.name ?? '',
+      chapterId: selectedExamChapter.value.id,
+      chapterName: selectedExamChapter.value.name,
+      topicId: selectedExamTopic.value?.id ?? null,
+      topicName: selectedExamTopic.value?.name ?? '',
+      nodeId: leafNode.id,
+      nodeName: leafNode.name,
+      languageId: language.id,
+      languageCode: language.code,
+      languageName: language.name,
+      // Canonical medium for existing translation / QTTM APIs
+      mediumId: language.instruction_medium_id,
+      mediumName: language.name,
+    }),
+  )
+
+  const query: Record<string, string> = {
+    scope: 'exam',
+    programId: String(selectedExamProgram.value.id),
+    chapterId: String(selectedExamChapter.value.id),
+    languageId: String(language.id),
+    mediumId: String(language.instruction_medium_id),
+    mediumName: language.name,
+  }
+  if (selectedExamStage.value) query.stageId = String(selectedExamStage.value.id)
+  if (selectedExamSubject.value) query.subjectId = String(selectedExamSubject.value.id)
+  if (selectedExamTopic.value) query.topicId = String(selectedExamTopic.value.id)
+
+  router.push({ name: 'questionDashboard', query })
+}
+
+function syncScopeQuery() {
+  const query = { ...route.query }
+  if (questionScope.value === 'exam') {
+    query.scope = 'exam'
+  } else {
+    delete query.scope
+    delete query.programId
+    delete query.nodeId
+    delete query.chapterId
+    delete query.topicId
+    delete query.stageId
+    delete query.subjectId
+    delete query.mediumId
+    delete query.mediumName
+    delete query.languageId
+  }
+  router.replace({ query }).catch(() => {})
+}
+
+watch(questionScope, () => {
+  syncScopeQuery()
+})
+
 // Lifecycle hooks
-onMounted(() => {
+onMounted(async () => {
+  if (route.query.scope === 'exam') {
+    questionScope.value = 'exam'
+  }
+
   fetchBoards()
+  await loadExamPrograms()
+  await loadExamLanguages()
+  await preselectExamFromQuery()
 })
 </script>
 
 <style scoped>
+.category-tabs {
+  border-bottom: 2px solid #dee2e6;
+}
+
+.category-tabs .nav-link {
+  color: #495057;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  background: transparent;
+}
+
+.category-tabs .nav-link:hover {
+  color: #212529;
+  border-bottom-color: #adb5bd;
+}
+
+.category-tabs .nav-link.active {
+  color: #212529;
+  font-weight: 600;
+  border-bottom-color: #212529;
+  background: transparent;
+}
+
 /* Styles for nav link */
 #navQuestion {
   font-weight: bolder;

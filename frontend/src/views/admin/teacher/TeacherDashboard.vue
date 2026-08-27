@@ -722,8 +722,8 @@ onMounted(async () => {
 
   // Initialize page from query params if present
   if (route.query.page) {
-    const page = parseInt(route.query.page as string)
-    if (!isNaN(page) && page > 0) {
+    const page = Number.parseInt(route.query.page as string)
+    if (!Number.isNaN(page) && page > 0) {
       currentPage.value = page
     }
   }
@@ -1233,11 +1233,11 @@ const groupedTeacherSubjects = computed(() => {
   )
 
   // Sort subjects alphabetically within each standard
-  Object.keys(groupedByStandard).forEach(standardName => {
+  for (const standardName of Object.keys(groupedByStandard)) {
     groupedByStandard[standardName].sort((a, b) =>
       a.mediumStandardSubject.subject.name.localeCompare(b.mediumStandardSubject.subject.name)
     )
-  })
+  }
 
   return groupedByStandard
 })

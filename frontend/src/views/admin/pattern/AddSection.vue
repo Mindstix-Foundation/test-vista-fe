@@ -4,11 +4,7 @@
       <div class="row g-2 justify-content-end">
         <router-link
           class="btn btn-close"
-          :to="
-            $route.query.fromEdit
-              ? { name: 'editPattern', params: { id: String($route.query.patternId) }, query: { from: 'editSection' } }
-              : { name: 'createPattern' }
-          "
+          :to="closeLink"
           aria-label="Close"
         />
       </div>
@@ -28,6 +24,7 @@
         :total-pattern-marks="totalPatternMarks"
         :remaining-marks="Number($route.query.remainingMarks || 0)"
         :disabled="isDisabled"
+        :exam-delivery-mode="examDeliveryMode"
       />
     </div>
   </div>
@@ -38,12 +35,63 @@ import { useRouter, useRoute } from 'vue-router'
 import SectionFormComponent from '@/components/forms/SectionFormComponent.vue'
 import type { SectionFormData } from '@/components/forms/SectionFormComponent.vue'
 import { usePatternStore } from '@/stores/pattern'
+import { useExamPatternStore } from '@/stores/examPattern'
 import { computed } from 'vue'
 import axiosInstance from '@/config/axios'
+import type { ExamDeliveryMode } from '@/utils/examPatternSection'
+
+function resolveQuestionTypesList(questionTypes: string[], questionType: string): string[] {
+  if (questionTypes.filter(Boolean).length) return questionTypes
+  if (questionType) return [questionType]
+  return []
+}
 
 const router = useRouter()
 const route = useRoute()
 const patternStore = usePatternStore()
+const examPatternStore = useExamPatternStore()
+
+const isExamScope = computed(() => route.query.scope === 'exam')
+const activeStore = computed(() => (isExamScope.value ? examPatternStore : patternStore))
+
+const examDeliveryMode = computed((): ExamDeliveryMode | null => {
+  if (!isExamScope.value) return null
+  const fromQuery = route.query.deliveryMode as ExamDeliveryMode | undefined
+  if (fromQuery === 'ONLINE_MCQ' || fromQuery === 'ONLINE_MIXED' || fromQuery === 'OFFLINE_PDF') {
+    return fromQuery
+  }
+  return examPatternStore.formData.deliveryMode
+})
+
+const closeLink = computed(() => {
+  if (isExamScope.value) {
+    if (route.query.fromEdit === 'true' && route.query.templateId) {
+      return {
+        name: 'editExamPattern',
+        params: { id: String(route.query.templateId) },
+        query: {
+          examProgramId: String(route.query.examProgramId ?? ''),
+          ...(route.query.examStageId ? { examStageId: String(route.query.examStageId) } : {}),
+        },
+      }
+    }
+    return {
+      name: 'createExamPattern',
+      query: {
+        examProgramId: String(route.query.examProgramId ?? ''),
+        ...(route.query.examStageId ? { examStageId: String(route.query.examStageId) } : {}),
+      },
+    }
+  }
+  if (route.query.fromEdit) {
+    return {
+      name: 'editPattern',
+      params: { id: String(route.query.patternId) },
+      query: { from: 'editSection' },
+    }
+  }
+  return { name: 'createPattern' }
+})
 
 const totalPatternMarks = computed(() => Number(route.query.remainingMarks ?? 0))
 const isDisabled = computed(() => totalPatternMarks.value <= 0)
@@ -68,7 +116,7 @@ interface SectionData {
 const handleSubmit = async (formData: SectionFormData) => {
   try {
     const isFromEditPattern = route.query.fromEdit === 'true'
-    const patternId = route.query.patternId as string
+    const patternId = (route.query.patternId || route.query.templateId) as string
     const nextSequenceNumber = route.query.nextSequenceNumber as string
     const nextSectionNumber = route.query.nextSectionNumber as string || '1'
 
@@ -101,6 +149,11 @@ const handleSectionCreation = async (
   nextSectionNumber: string,
   formData: SectionFormData
 ) => {
+  if (isExamScope.value) {
+    addSectionToStoreForExam(nextSectionNumber, nextSequenceNumber, formData, isFromEditPattern, patternId)
+    return
+  }
+
   if (isFromEditPattern && patternId && !storeOnly.value) {
     await createSectionInBackend(patternId, nextSequenceNumber, formData)
   } else if (isFromEditPattern && patternId && storeOnly.value) {
@@ -174,14 +227,59 @@ const addSectionToStoreForEditPattern = (
     requiredQuestions: Number(formData.requiredQuestions),
     marksPerQuestion: Number(formData.marksPerQuestion),
     sameType: formData.sameType,
-    questionType: formData.questionType,
-    questionTypes: formData.questionTypes,
+    questionType: formData.questionType || formData.questionTypes.find(Boolean) || '',
+    questionTypes: resolveQuestionTypesList(formData.questionTypes, formData.questionType),
     seqencial_section_number: Number(nextSequenceNumber),
     isNew: true, // Mark as new section
     isModified: false, // Not modified since it's new
   }
   patternStore.addSection(sectionData)
   navigateToEditPattern(patternId)
+}
+
+// Helper function to add section to store for exam pattern
+const addSectionToStoreForExam = (
+  nextSectionNumber: string,
+  nextSequenceNumber: string,
+  formData: SectionFormData,
+  isFromEdit: boolean,
+  templateId: string,
+) => {
+  const sectionData: SectionData = {
+    questionNumber: formData.questionNumber || nextSectionNumber,
+    subQuestion: formData.subQuestion,
+    sectionName: formData.sectionName,
+    totalQuestions: Number(formData.totalQuestions),
+    requiredQuestions: Number(formData.requiredQuestions),
+    marksPerQuestion: Number(formData.marksPerQuestion),
+    sameType: formData.sameType,
+    questionType: formData.questionType || formData.questionTypes.find(Boolean) || '',
+    questionTypes: resolveQuestionTypesList(formData.questionTypes, formData.questionType),
+    seqencial_section_number: Number(nextSequenceNumber),
+    isNew: true,
+    isModified: false,
+  }
+  examPatternStore.addSection(sectionData)
+
+  if (isFromEdit && templateId) {
+    router.push({
+      name: 'editExamPattern',
+      params: { id: templateId },
+      query: {
+        from: 'editSection',
+        examProgramId: String(route.query.examProgramId ?? ''),
+        ...(route.query.examStageId ? { examStageId: String(route.query.examStageId) } : {}),
+      },
+    })
+  } else {
+    router.push({
+      name: 'createExamPattern',
+      query: {
+        examProgramId: String(route.query.examProgramId ?? ''),
+        ...(route.query.examStageId ? { examStageId: String(route.query.examStageId) } : {}),
+      },
+    })
+  }
 }
 
 // Helper function to add section to store for new pattern
@@ -195,8 +293,8 @@ const addSectionToStoreForNewPattern = (nextSectionNumber: string, formData: Sec
     requiredQuestions: Number(formData.requiredQuestions),
     marksPerQuestion: Number(formData.marksPerQuestion),
     sameType: formData.sameType,
-    questionType: formData.questionType,
-    questionTypes: formData.questionTypes,
+    questionType: formData.questionType || formData.questionTypes.find(Boolean) || '',
+    questionTypes: resolveQuestionTypesList(formData.questionTypes, formData.questionType),
     seqencial_section_number: patternStore.sections.length + 1,
   }
   patternStore.addSection(sectionData)
@@ -238,7 +336,7 @@ const createSubsectionQuestionType = async (
 
 // Add computed property to check if more sections can be added
 const canAddSection = computed(() => {
-  return patternStore.remainingMarks > 0
+  return activeStore.value.remainingMarks > 0
 })
 </script>
 

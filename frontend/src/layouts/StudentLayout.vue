@@ -1,10 +1,7 @@
 <template>
-  <div>
-    <StudentNavbar />
-    <router-view></router-view>
-  </div>
+  <AppShell portal="student" />
 </template>
 
 <script setup lang="ts">
-import StudentNavbar from '@/components/StudentNavbar.vue'
-</script> 
+import AppShell from '@/components/layout/AppShell.vue'
+</script>

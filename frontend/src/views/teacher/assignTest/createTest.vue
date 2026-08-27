@@ -154,7 +154,7 @@
           <!-- Question Origin Selection -->
           <div class="col-12 col-sm-10 col-md-8" v-if="chapters.length > 0">
             <div class="mb-4">
-              <label class="form-label fw-bold mb-3">Question Source <span class="text-danger">*</span></label>
+              <div class="form-label fw-bold mb-3">Question Source <span class="text-danger">*</span></div>
               
               <div class="d-flex flex-column gap-2">
                 <div class="form-check">
@@ -232,7 +232,7 @@
               id="viewSyllabusBtn"
               :disabled="!isFormValid || isLoading || !totalMarks || selectedChapters.length === 0"
             >
-              <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <output v-if="isLoading" class="spinner-border spinner-border-sm me-2"></output>
               Select Pattern
             </button>
           </div>
@@ -258,6 +258,14 @@ import axiosInstance from '@/config/axios'
 import ToastNotification from '@/components/common/ToastNotification.vue'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
 import { VALIDATION_MESSAGES } from '@/utils/validationConstants'
+import type {
+  InstructionMediumItem,
+  StandardItem,
+  SubjectItem,
+  MarksItem,
+  CreateTestUserProfile as UserProfile,
+  ChapterItem,
+} from '@/types/createTestPaperForm'
 
 // Define component name (for linter)
 defineOptions({
@@ -271,112 +279,6 @@ const router = useRouter()
 // Question source selection
 const questionSource = ref('both') // Default selection
 
-// Define interfaces for our data types
-interface SchoolInstructionMedium {
-  id: number;
-  instruction_medium_id: number;
-  school_id: number;
-  created_at: string;
-  updated_at: string;
-  instruction_medium: {
-    id: number;
-    board_id: number;
-    instruction_medium: string;
-    created_at: string;
-    updated_at: string;
-  };
-}
-
-// Interface for simplified instruction medium that will be used in the dropdown
-interface InstructionMediumItem {
-  id: number;
-  name: string;
-  original: SchoolInstructionMedium;
-  selected: boolean;
-}
-
-interface StandardItem {
-  id: number;
-  board_id: number;
-  name: string;
-  sequence_number: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface SubjectItem {
-  subject_id: number;
-  subject_name: string;
-}
-
-// New interface for marks
-interface MarksItem {
-  id: number;
-  name: string;
-}
-
-interface UserProfile {
-  id: number;
-  name: string;
-  email_id: string;
-  schools: {
-    id: number;
-    name: string;
-    board?: {
-      id: number;
-      name: string;
-      abbreviation: string;
-    };
-  }[];
-  teaching_subjects: {
-    id: number;
-    standard: {
-      id: number;
-      name: string;
-      sequence_number: number;
-    };
-    subject: {
-      id: number;
-      name: string;
-    };
-  }[];
-}
-
-// Interface for Chapter with additional UI properties
-interface ChapterItem {
-  id: number;
-  subject_id: number;
-  standard_id: number;
-  sequential_chapter_number: number;
-  name: string;
-  created_at: string;
-  updated_at: string;
-  subject: {
-    id: number;
-    board_id: number;
-    name: string;
-    created_at: string;
-    updated_at: string;
-  };
-  standard: {
-    id: number;
-    board_id: number;
-    name: string;
-    sequence_number: number;
-    created_at: string;
-    updated_at: string;
-  };
-  topics: Array<{
-    id: number;
-    chapter_id: number;
-    sequential_topic_number: number;
-    name: string;
-    created_at: string;
-    updated_at: string;
-  }>;
-  // UI properties
-  selected: boolean;
-}
 
 // User data
 const userProfile = ref<UserProfile | null>(null)
@@ -698,7 +600,7 @@ const saveFormState = () => {
         selected: c.selected
       })),
       selectedMarksObj: selectedMarksObj.value,
-      timestamp: new Date().getTime()
+      timestamp: Date.now()
     }
     localStorage.setItem('testPaperDashboardStateAssign', JSON.stringify(formState))
   } catch (error) {
@@ -746,9 +648,9 @@ const restoreMediumsSelection = (formState) => {
   
   selectedMediums.value = formState.selectedMediums
   // Update the selected state in instructionMediums
-  instructionMediums.value.forEach(medium => {
+  for (const medium of instructionMediums.value) {
     medium.selected = selectedMediums.value.some(m => m.id === medium.id)
-  })
+  }
   // Update selectAll state
   selectAllMediums.value = instructionMediums.value.length > 0 && 
     instructionMediums.value.every(m => m.selected)
@@ -757,12 +659,12 @@ const restoreMediumsSelection = (formState) => {
 const restoreChaptersSelection = (formState) => {
   if (!formState.chapters || chapters.value.length === 0) return
   
-  formState.chapters.forEach((savedChapter: {id: number, selected: boolean}) => {
+  for (const savedChapter of formState.chapters) {
     const matchingChapter = chapters.value.find(c => c.id === savedChapter.id)
     if (matchingChapter) {
       matchingChapter.selected = savedChapter.selected
     }
-  })
+  }
   
   // Update selectAll checkbox state based on individual selections
   selectAllChapters.value = chapters.value.length > 0 && chapters.value.every(c => c.selected)
@@ -783,7 +685,7 @@ const restoreMarksSelection = async (formState) => {
   ) ?? null
   
   if (selectedMarksObj.value) {
-    totalMarks.value = parseInt(selectedMarksObj.value.name, 10)
+    totalMarks.value = Number.parseInt(selectedMarksObj.value.name, 10)
   }
 }
 
@@ -922,7 +824,7 @@ watch(() => selectedMediums.value, () => {
 // New handler for marks dropdown change
 const handleMarksChange = () => {
   if (selectedMarksObj.value) {
-    totalMarks.value = parseInt(selectedMarksObj.value.name, 10)
+    totalMarks.value = Number.parseInt(selectedMarksObj.value.name, 10)
   } else {
     totalMarks.value = null
   }
@@ -962,17 +864,17 @@ onBeforeUnmount(() => {
 
 // Add new functions for handling medium selection
 const toggleAllMediums = () => {
-  instructionMediums.value.forEach(medium => {
+  for (const medium of instructionMediums.value) {
     medium.selected = selectAllMediums.value
-  })
+  }
   updateSelectedMediums()
 }
 
 // Add the missing toggleAllChapters function
 const toggleAllChapters = () => {
-  chapters.value.forEach(chapter => {
+  for (const chapter of chapters.value) {
     chapter.selected = selectAllChapters.value
-  })
+  }
   updateSelectedChapters()
 }
 

@@ -252,7 +252,7 @@
             class="btn btn-dark"
             :disabled="!isFormValid || remainingMarks !== 0"
           >
-            <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></span>
+            <output v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></output>
             Save
           </button>
         </div>
@@ -526,9 +526,9 @@ const fetchBoards = async () => {
 
 const handleSubmit = async () => {
   // Mark all fields as touched
-  Object.keys(validationStates.value).forEach((key) => {
+  for (const key of Object.keys(validationStates.value)) {
     validationStates.value[key as keyof typeof validationStates.value].touched = true
-  })
+  }
 
   if (!isFormValid.value) {
     return
@@ -538,9 +538,7 @@ const handleSubmit = async () => {
   formData.value.patternName = capitalizeFirstLetter(formData.value.patternName)
 
   // Only emit submit if not in edit mode
-  if (!props.isEditMode) {
-    emit('submit', formData.value)
-  } else {
+  if (props.isEditMode) {
     // For edit mode, emit a different event for pattern info update
     emit('updatePatternInfo', {
       pattern_name: formData.value.patternName,
@@ -549,6 +547,8 @@ const handleSubmit = async () => {
       subject_id: formData.value.selectedSubject?.id,
       total_marks: formData.value.totalMarks,
     })
+  } else {
+    emit('submit', formData.value)
   }
 }
 
@@ -559,9 +559,9 @@ const addSection = () => {
   }
 
   // Mark all fields as touched to show validation errors
-  Object.keys(validationStates.value).forEach((key) => {
+  for (const key of Object.keys(validationStates.value)) {
     validationStates.value[key as keyof typeof validationStates.value].touched = true
-  })
+  }
 
   // Check if form is valid for adding section
   if (!formData.value.patternName) {

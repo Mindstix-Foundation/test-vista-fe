@@ -26,7 +26,10 @@
       data-dashlane-ignore="true"
       role="combobox"
       aria-expanded="false"
+      :aria-expanded="showDropdown ? 'true' : 'false'"
       aria-haspopup="listbox"
+      aria-controls="combobox-listbox"
+      :aria-controls="listboxId"
       :readonly="!isSearchEnabled"
       :onfocus="isSearchEnabled ? 'this.removeAttribute(\'readonly\')' : undefined"
       required
@@ -37,10 +40,14 @@
       class="dropdown-menu"
       :class="{ show: showDropdown }"
       style="position: absolute; width: 100%; z-index: 1000"
-      role="listbox"
+      :id="listboxId"
     >
+      <!-- Show loading while parent fetches options -->
+      <div v-if="loading" class="dropdown-item no-data-item">
+        Loading…
+      </div>
       <!-- Show "No data available" message when there are no items -->
-      <div v-if="processedItems.length === 0" class="dropdown-item no-data-item">
+      <div v-else-if="processedItems.length === 0" class="dropdown-item no-data-item">
         No data available
       </div>
       <!-- Show "No results found" when there are items but none match the search -->
@@ -57,8 +64,6 @@
         @click="selectItem(item)"
         @mousedown.prevent
         type="button"
-        role="option"
-        :aria-selected="index === selectedIndex"
       >
         <slot name="item" :item="item">
           {{ getItemLabel(item) }}
@@ -99,6 +104,8 @@ interface Props {
   itemKey?: string
   nextFieldId?: string
   dataPath?: string
+  /** When true, show Loading… instead of No data available */
+  loading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -110,6 +117,7 @@ const props = withDefaults(defineProps<Props>(), {
   itemKey: 'id',
   nextFieldId: undefined,
   dataPath: '',
+  loading: false,
 })
 
 const emit = defineEmits<{
@@ -121,6 +129,7 @@ const searchText = ref('')
 const showDropdown = ref(false)
 const selectedIndex = ref(-1)
 const dropdownRef = ref<HTMLElement | null>(null)
+const listboxId = computed(() => `${props.id}-listbox`)
 
 const getNestedValue = (obj: Record<string, unknown> | null | undefined, path: string): unknown => {
   if (!obj) return undefined
@@ -184,7 +193,8 @@ watch(
   (newValue) => {
     if (newValue) {
       searchText.value = getItemLabel(newValue)
-    } else {
+    } else if (!showDropdown.value) {
+      // Keep typed search text while the user is filtering (handleInput emits null)
       searchText.value = ''
     }
   },
@@ -272,6 +282,47 @@ const handleInput = () => {
   })
 }
 
+const openDropdownAtIndex = (index: number) => {
+  showDropdown.value = true
+  selectedIndex.value = index
+}
+
+const handleArrowDown = () => {
+  if (showDropdown.value) {
+    selectedIndex.value = Math.min(selectedIndex.value + 1, filteredItems.value.length - 1)
+  } else {
+    openDropdownAtIndex(filteredItems.value.length > 0 ? 0 : -1)
+  }
+  scrollToSelectedItem()
+}
+
+const handleArrowUp = () => {
+  if (showDropdown.value) {
+    selectedIndex.value = Math.max(selectedIndex.value - 1, -1)
+  } else {
+    openDropdownAtIndex(
+      filteredItems.value.length > 0 ? filteredItems.value.length - 1 : -1,
+    )
+  }
+  scrollToSelectedItem()
+}
+
+const handleEnterKey = () => {
+  if (!showDropdown.value) {
+    showDropdown.value = true
+    if (filteredItems.value.length > 0) {
+      selectedIndex.value = 0
+    }
+    return
+  }
+
+  if (selectedIndex.value >= 0 && filteredItems.value[selectedIndex.value]) {
+    selectItem(filteredItems.value[selectedIndex.value])
+  } else if (filteredItems.value.length > 0) {
+    selectItem(filteredItems.value[0])
+  }
+}
+
 const handleKeydown = (event: KeyboardEvent) => {
   // Always prevent default for arrow keys and enter to avoid browser interference
   if (['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) {
@@ -283,39 +334,13 @@ const handleKeydown = (event: KeyboardEvent) => {
 
   switch (event.key) {
     case 'ArrowDown':
-      if (!showDropdown.value) {
-        showDropdown.value = true
-        selectedIndex.value = filteredItems.value.length > 0 ? 0 : -1
-      } else {
-        selectedIndex.value = Math.min(selectedIndex.value + 1, filteredItems.value.length - 1)
-      }
-      scrollToSelectedItem()
+      handleArrowDown()
       break
     case 'ArrowUp':
-      if (!showDropdown.value) {
-        showDropdown.value = true
-        selectedIndex.value = filteredItems.value.length > 0 ? filteredItems.value.length - 1 : -1
-      } else {
-        selectedIndex.value = Math.max(selectedIndex.value - 1, -1)
-      }
-      scrollToSelectedItem()
+      handleArrowUp()
       break
     case 'Enter':
-      if (!showDropdown.value) {
-        showDropdown.value = true
-        if (filteredItems.value.length > 0) {
-          selectedIndex.value = 0
-        }
-        return
-      }
-      
-      if (selectedIndex.value >= 0 && filteredItems.value[selectedIndex.value]) {
-        // If an item is selected in the dropdown, select that item
-        selectItem(filteredItems.value[selectedIndex.value])
-      } else if (filteredItems.value.length > 0) {
-        // If no item is selected but there are items in the dropdown, select the first one
-        selectItem(filteredItems.value[0])
-      }
+      handleEnterKey()
       break
     case 'Escape':
       showDropdown.value = false
@@ -456,7 +481,7 @@ const clearAutofillData = () => {
     if (input) {
       // Set a temporary random value
       const originalValue = input.value
-      input.value = `no-autofill-${Math.random()}`
+      input.value = `no-autofill-${crypto.randomUUID()}`
 
       // Then restore the original value
       setTimeout(() => {
@@ -464,16 +489,16 @@ const clearAutofillData = () => {
         
         // Additional measures to prevent autofill
         input.setAttribute('autocomplete', 'new-password')
-        input.setAttribute('data-form-type', 'other')
-        input.setAttribute('data-lpignore', 'true')
-        input.setAttribute('data-1p-ignore', 'true')
-        input.setAttribute('data-bwignore', 'true')
-        input.setAttribute('data-dashlane-ignore', 'true')
+        input.dataset.formType = 'other'
+        input.dataset.lpignore = 'true'
+        input.dataset['1pIgnore'] = 'true'
+        input.dataset.bwignore = 'true'
+        input.dataset.dashlaneIgnore = 'true'
         input.setAttribute('aria-autocomplete', 'none')
         
         // Disable browser address suggestions
-        input.setAttribute('data-address-field', 'no')
-        input.setAttribute('data-ms-editor', 'false')
+        input.dataset.addressField = 'no'
+        input.dataset.msEditor = 'false'
       }, 1)
     }
   }

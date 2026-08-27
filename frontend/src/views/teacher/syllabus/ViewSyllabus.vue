@@ -26,9 +26,9 @@
     <div class="container">
       <!-- Loading indicator -->
       <div v-if="isLoading" class="text-center my-5">
-        <div class="spinner-border text-primary" role="status">
+        <output class="spinner-border text-primary">
           <span class="visually-hidden">Loading...</span>
-        </div>
+        </output>
         <p class="mt-2">Loading syllabus chapters...</p>
       </div>
 
@@ -201,9 +201,9 @@ const toggleChapter = async (chapter: Chapter) => {
     chapter.isExpanded = true;
     
     // Reset animation state of all topics
-    chapter.topics.forEach(topic => {
+    for (const topic of chapter.topics) {
       topic.isVisible = false;
-    });
+    }
     
     // Wait for DOM update
     await nextTick();
@@ -278,7 +278,7 @@ const fetchChapters = async (subjectId: number, standardId: number, mediumId?: n
 
 // Scroll to top functionality
 const scrollToTop = () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  globalThis.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 // Show/hide back to top button based on scroll position
@@ -297,15 +297,15 @@ const handleScroll = () => {
 const getEntityIds = () => {
   // Use the IDs from the query parameters
   return { 
-    subjectId: parseInt(subjectId.value) || 0, 
-    standardId: parseInt(standardId.value) || 0,
-    mediumId: parseInt(mediumId.value) || undefined
+    subjectId: Number.parseInt(subjectId.value) || 0, 
+    standardId: Number.parseInt(standardId.value) || 0,
+    mediumId: Number.parseInt(mediumId.value) || undefined
   };
 };
 
 // Setup and cleanup scroll event listener
 onMounted(() => {
-  window.addEventListener('scroll', handleScroll);
+  globalThis.addEventListener('scroll', handleScroll);
   // Hide button initially
   const backToTopButton = document.getElementById('backToTop');
   if (backToTopButton) {
@@ -323,7 +323,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll);
+  globalThis.removeEventListener('scroll', handleScroll);
 });
 </script>
 

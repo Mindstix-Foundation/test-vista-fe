@@ -74,9 +74,9 @@
       <!-- Loading state -->
       <div v-if="loading" class="row justify-content-center my-5">
         <div class="col-12 text-center">
-          <div class="spinner-border text-primary" role="status">
+          <output class="spinner-border text-primary">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-2 text-muted">Loading ITI students...</p>
         </div>
       </div>
@@ -405,7 +405,7 @@
             @click="removeStudent"
             :disabled="removing"
           >
-            <span v-if="removing" class="spinner-border spinner-border-sm me-2"></span>
+            <output v-if="removing" class="spinner-border spinner-border-sm me-2"></output>
             {{ removing ? 'Removing...' : 'Remove Student' }}
           </button>
         </div>
@@ -473,7 +473,7 @@
             @click="removeAllStudents"
             :disabled="confirmationText !== 'sure' || removingAll"
           >
-            <span v-if="removingAll" class="spinner-border spinner-border-sm me-2"></span>
+            <output v-if="removingAll" class="spinner-border spinner-border-sm me-2"></output>
             {{ removingAll ? 'Removing All...' : 'Remove All Students' }}
           </button>
         </div>
@@ -530,7 +530,7 @@ const sortedStudents = computed(() => {
   
   if (sortBy.value === 'roll_no') {
     sorted.sort((a: ItiStudent, b: ItiStudent) => 
-      parseInt(a.student_id) - parseInt(b.student_id)
+      Number.parseInt(a.student_id) - Number.parseInt(b.student_id)
     )
   } else if (sortBy.value === 'name') {
     sorted.sort((a: ItiStudent, b: ItiStudent) => 
@@ -615,6 +615,7 @@ const formatDate = (dateString: string): string => {
       year: 'numeric'
     })
   } catch (error) {
+    console.error(error)
     return 'Invalid date'
   }
 }
@@ -632,6 +633,7 @@ const formatTime = (dateString: string): string => {
       minute: '2-digit'
     })
   } catch (error) {
+    console.error(error)
     return 'Invalid time'
   }
 }
@@ -662,7 +664,7 @@ const confirmRemoveStudent = (student: ItiStudent) => {
   if (modalElement) {
     // Try to use Bootstrap's Modal class
     try {
-      const modal = new (window as any).bootstrap.Modal(modalElement)
+      const modal = new (globalThis as any).bootstrap.Modal(modalElement)
       modal.show()
     } catch (error) {
       console.error('Bootstrap Modal error:', error)
@@ -689,7 +691,7 @@ const confirmRemoveAllStudents = () => {
   const modalElement = document.getElementById('removeAllStudentsModal')
   if (modalElement) {
     try {
-      const modal = new (window as any).bootstrap.Modal(modalElement)
+      const modal = new (globalThis as any).bootstrap.Modal(modalElement)
       modal.show()
     } catch (error) {
       console.error('Bootstrap Modal error:', error)
@@ -725,7 +727,7 @@ const removeStudent = async () => {
     const modalElement = document.getElementById('removeStudentModal')
     if (modalElement) {
       try {
-        const modal = (window as any).bootstrap.Modal.getInstance(modalElement)
+        const modal = (globalThis as any).bootstrap.Modal.getInstance(modalElement)
         if (modal) {
           modal.hide()
         } else {
@@ -789,7 +791,7 @@ const removeAllStudents = async () => {
     const modalElement = document.getElementById('removeAllStudentsModal')
     if (modalElement) {
       try {
-        const modal = (window as any).bootstrap.Modal.getInstance(modalElement)
+        const modal = (globalThis as any).bootstrap.Modal.getInstance(modalElement)
         if (modal) {
           modal.hide()
         } else {
@@ -833,7 +835,7 @@ const cancelRemoveStudent = () => {
   const modalElement = document.getElementById('removeStudentModal')
   if (modalElement) {
     try {
-      const modal = (window as any).bootstrap.Modal.getInstance(modalElement)
+      const modal = (globalThis as any).bootstrap.Modal.getInstance(modalElement)
       if (modal) {
         modal.hide()
       } else {
@@ -857,7 +859,7 @@ const cancelRemoveAllStudents = () => {
   const modalElement = document.getElementById('removeAllStudentsModal')
   if (modalElement) {
     try {
-      const modal = (window as any).bootstrap.Modal.getInstance(modalElement)
+      const modal = (globalThis as any).bootstrap.Modal.getInstance(modalElement)
       if (modal) {
         modal.hide()
       } else {
@@ -953,7 +955,7 @@ onUnmounted(() => {
 <style scoped>
 .iti-students-list {
   background-color: #f8f9fa;
-  min-height: calc(100vh - 76px);
+  min-height: calc(100vh - var(--topbar-height, 56px));
 }
 
 .icon-circle {

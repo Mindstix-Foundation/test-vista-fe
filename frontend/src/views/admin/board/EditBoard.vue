@@ -277,7 +277,6 @@ const processEntityChanges = <T extends { id?: number; name: string }, U extends
   })
   
   const validFormEntities = formEntities.filter(entity => entity.name.trim())
-  const toUpdate: T[] = []
   const currentEntityIds = new Set(currentEntities.map(entity => entity.id))
   
   // 🛡️ SAFETY FIX: Only include entities that actually have valid IDs
@@ -292,66 +291,8 @@ const processEntityChanges = <T extends { id?: number; name: string }, U extends
     formEntityIds: Array.from(formEntityIds)
   })
 
-  // Find entities to update (existing entities with changes or new entities)
-  validFormEntities.forEach((formEntity, index) => {
-    if (formEntity.id && typeof formEntity.id === 'number' && formEntity.id > 0) {
-      // Existing entity - check if it changed
-      const currentEntity = currentEntities.find(entity => entity.id === formEntity.id)
-      if (currentEntity) {
-        // 🛡️ FIX: Handle property name mismatch between form and current entities
-        const currentName = currentEntity[nameField]?.toLowerCase().trim()
-        const formName = formEntity.name.toLowerCase().trim()
-        
-        console.log(`🔍 Comparing entity ${formEntity.id}:`, {
-          currentName,
-          formName,
-          nameField,
-          currentEntity: currentEntity,
-          formEntity: formEntity
-        })
-        
-        // For standards, also check sequence number based on current position in form
-        let sequenceChanged = false
-        if ('sequence_number' in currentEntity) {
-          const expectedSequence = index + 1
-          sequenceChanged = currentEntity.sequence_number !== expectedSequence
-        }
-        
-        // Only mark for update if the name actually changed or sequence changed
-        if (currentName !== formName || sequenceChanged) {
-          console.log(`🔍 Entity ${formEntity.id} marked for update:`, {
-            nameChanged: currentName !== formName,
-            sequenceChanged,
-            currentName,
-            formName
-          })
-          toUpdate.push(formEntity)
-        } else {
-          console.log(`🔍 Entity ${formEntity.id} unchanged, skipping update`)
-        }
-      }
-    } else {
-      // New entity (no ID or invalid ID)
-      console.log('🔍 New entity detected:', formEntity)
-      toUpdate.push(formEntity)
-    }
-  })
-
-  // 🛡️ SAFETY FIX: Only mark entities for deletion if we have valid form data
-  // and there are actually entities missing from the form
-  let toDelete: number[] = []
-  
-  if (formEntityIds.size > 0) {
-    // Only proceed with deletion logic if we have valid form entity IDs
-    toDelete = currentEntities
-      .filter(entity => !formEntityIds.has(entity.id))
-      .map(entity => entity.id)
-  } else if (validFormEntities.length === 0) {
-    // Only delete all if the form is explicitly empty (user removed all entities)
-    toDelete = currentEntities.map(entity => entity.id)
-  }
-  // If formEntityIds.size === 0 but validFormEntities.length > 0, 
-  // it means we only have new entities, so don't delete anything
+  const toUpdate = collectEntitiesToUpdate(validFormEntities, currentEntities, nameField)
+  const toDelete = collectEntitiesToDelete(validFormEntities, currentEntities, formEntityIds)
   
   console.log('🔍 Final result:', {
     entityType: nameField,
@@ -361,23 +302,110 @@ const processEntityChanges = <T extends { id?: number; name: string }, U extends
     updateItems: toUpdate.map(item => ({ id: item.id, name: item.name }))
   })
   
-  // 🚨 SAFETY CHECK: Warn if we're about to delete subjects
-  if (nameField === 'name' && toDelete.length > 0) {
+  warnEntityDeletions(nameField, toDelete, currentEntities)
+
+  return { toUpdate, toDelete }
+}
+
+const hasValidEntityId = (id?: number): id is number =>
+  typeof id === 'number' && id > 0
+
+const didEntityChange = <T extends { id?: number; name: string }, U extends { id: number; [key: string]: any }>(
+  formEntity: T,
+  currentEntity: U,
+  nameField: string,
+  index: number,
+): boolean => {
+  const currentName = currentEntity[nameField]?.toLowerCase().trim()
+  const formName = formEntity.name.toLowerCase().trim()
+
+  console.log(`🔍 Comparing entity ${formEntity.id}:`, {
+    currentName,
+    formName,
+    nameField,
+    currentEntity,
+    formEntity,
+  })
+
+  let sequenceChanged = false
+  if ('sequence_number' in currentEntity) {
+    sequenceChanged = currentEntity.sequence_number !== index + 1
+  }
+
+  const changed = currentName !== formName || sequenceChanged
+  if (changed) {
+    console.log(`🔍 Entity ${formEntity.id} marked for update:`, {
+      nameChanged: currentName !== formName,
+      sequenceChanged,
+      currentName,
+      formName,
+    })
+  } else {
+    console.log(`🔍 Entity ${formEntity.id} unchanged, skipping update`)
+  }
+  return changed
+}
+
+const collectEntitiesToUpdate = <T extends { id?: number; name: string }, U extends { id: number; [key: string]: any }>(
+  validFormEntities: T[],
+  currentEntities: U[],
+  nameField: string,
+): T[] => {
+  const toUpdate: T[] = []
+  for (const [index, formEntity] of validFormEntities.entries()) {
+    if (hasValidEntityId(formEntity.id)) {
+      const currentEntity = currentEntities.find(entity => entity.id === formEntity.id)
+      if (currentEntity && didEntityChange(formEntity, currentEntity, nameField, index)) {
+        toUpdate.push(formEntity)
+      }
+    } else {
+      console.log('🔍 New entity detected:', formEntity)
+      toUpdate.push(formEntity)
+    }
+  }
+  return toUpdate
+}
+
+const collectEntitiesToDelete = <T extends { id?: number; name: string }, U extends { id: number }>(
+  validFormEntities: T[],
+  currentEntities: U[],
+  formEntityIds: Set<number | undefined>,
+): number[] => {
+  // 🛡️ SAFETY FIX: Only mark entities for deletion if we have valid form data
+  if (formEntityIds.size > 0) {
+    return currentEntities
+      .filter(entity => !formEntityIds.has(entity.id))
+      .map(entity => entity.id)
+  }
+  if (validFormEntities.length === 0) {
+    // Only delete all if the form is explicitly empty (user removed all entities)
+    return currentEntities.map(entity => entity.id)
+  }
+  // If formEntityIds.size === 0 but validFormEntities.length > 0,
+  // it means we only have new entities, so don't delete anything
+  return []
+}
+
+const warnEntityDeletions = <U extends { id: number }>(
+  nameField: string,
+  toDelete: number[],
+  currentEntities: U[],
+) => {
+  if (toDelete.length === 0) return
+
+  if (nameField === 'name') {
     console.warn('⚠️ WARNING: About to delete subjects! This will cascade delete questions!', {
       subjectsToDelete: toDelete,
-      currentEntities: currentEntities.filter(e => toDelete.includes(e.id))
-    })
-  }
-  
-  // 🚨 SAFETY CHECK: Warn if we're about to delete mediums unnecessarily
-  if (nameField === 'instruction_medium' && toDelete.length > 0) {
-    console.warn('⚠️ WARNING: About to delete instruction mediums!', {
-      mediumsToDelete: toDelete,
-      currentEntities: currentEntities.filter(e => toDelete.includes(e.id))
+      currentEntities: currentEntities.filter(e => toDelete.includes(e.id)),
     })
   }
 
-  return { toUpdate, toDelete }
+  if (nameField === 'instruction_medium') {
+    console.warn('⚠️ WARNING: About to delete instruction mediums!', {
+      mediumsToDelete: toDelete,
+      currentEntities: currentEntities.filter(e => toDelete.includes(e.id)),
+    })
+  }
 }
 
 // 🧪 DEBUG HELPER: Add this comprehensive debug function to verify the fix

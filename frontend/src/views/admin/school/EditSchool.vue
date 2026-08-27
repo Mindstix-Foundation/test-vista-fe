@@ -210,7 +210,7 @@ const buildUpdatePayload = (
   currentSchool: School
 ): UpdateSchoolDto => {
   const payload: UpdateSchoolDto = {
-    id: parseInt(schoolId.value)
+    id: Number.parseInt(schoolId.value, 10)
   }
 
   // Check if basic school details changed
@@ -353,7 +353,7 @@ const cleanupAndNavigate = () => {
     operationResultModal?.hide()
 
     // Remove backdrop manually
-    document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove())
+    for (const backdrop of document.querySelectorAll('.modal-backdrop')) backdrop.remove();
 
     // Remove modal-open class and inline styles from body
     document.body.classList.remove('modal-open')

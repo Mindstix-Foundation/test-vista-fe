@@ -380,12 +380,12 @@ const handleDuplicateSequenceNumbers = (sequenceNumbers: number[]) => {
   // Find duplicates
   const counts: Record<number, number> = {}
   const duplicates: number[] = []
-  sequenceNumbers.forEach(num => {
+  for (const num of sequenceNumbers) {
     counts[num] = (counts[num] || 0) + 1
     if (counts[num] > 1 && !duplicates.includes(num)) {
       duplicates.push(num)
     }
-  })
+  }
   
   console.warn('Duplicate sequence numbers:', duplicates)
   
@@ -404,14 +404,14 @@ const handleDuplicateSequenceNumbers = (sequenceNumbers: number[]) => {
   })
   
   // Reassign sequence numbers
-  sortedSections.forEach((section, index) => {
+  for (const [index, section] of sortedSections.entries()) {
     const newSequenceNumber = index + 1
     if (section.seqencial_section_number !== newSequenceNumber) {
       console.log(`Changing sequence number for section "${section.sectionName}" from ${section.seqencial_section_number} to ${newSequenceNumber}`)
       section.seqencial_section_number = newSequenceNumber
       section.isModified = true
     }
-  })
+  }
   
   // Log the fixed sequence numbers
   console.log('Fixed sequence numbers:', patternStore.sections.map(s => ({
@@ -642,7 +642,7 @@ const handleAddSection = (formData: FormData) => {
 
   // Find the highest sequence number from existing sections
   const highestSequenceNumber = patternStore.sections.reduce((max, section) => {
-    return section.seqencial_section_number > max ? section.seqencial_section_number : max
+    return Math.max(section.seqencial_section_number, max)
   }, 0)
 
   // Calculate next sequence number (always one more than the highest existing sequence number)
@@ -650,8 +650,8 @@ const handleAddSection = (formData: FormData) => {
 
   // Find the highest Q number (section_number) from existing sections
   const highestSectionNumber = patternStore.sections.reduce((max, section) => {
-    const currentNumber = parseInt(section.questionNumber) || 0
-    return currentNumber > max ? currentNumber : max
+    const currentNumber = Number.parseInt(section.questionNumber, 10) || 0
+    return Math.max(currentNumber, max)
   }, 0)
   const nextSectionNumber = highestSectionNumber + 1
 
@@ -745,11 +745,11 @@ const confirmDeleteSection = () => {
     console.log(`Adding section ID ${sectionToDelete.id} to deletion list - will be deleted when pattern is saved`);
 
     // Check if the ID is already in the array to avoid duplicates
-    if (!sectionsToDelete.value.includes(sectionToDelete.id)) {
+    if (sectionsToDelete.value.includes(sectionToDelete.id)) {
+      console.log(`Section ID ${sectionToDelete.id} already in deletion list, skipping`);
+    } else {
       sectionsToDelete.value.push(sectionToDelete.id);
       console.log(`Section ID ${sectionToDelete.id} added to deletion list`);
-    } else {
-      console.log(`Section ID ${sectionToDelete.id} already in deletion list, skipping`);
     }
 
     console.log('Updated sections to delete:', sectionsToDelete.value);

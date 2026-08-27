@@ -6,7 +6,7 @@
 
 export const isMobileDevice = (): boolean => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-         (window.innerWidth <= 768 && 'ontouchstart' in window)
+         (globalThis.innerWidth <= 768 && 'ontouchstart' in globalThis)
 }
 
 export const enableMobileScrolling = (): void => {
@@ -33,13 +33,13 @@ export const fixViewportHeight = (): void => {
   if (!isMobileDevice()) return
 
   const setVH = () => {
-    const vh = window.innerHeight * 0.01
+    const vh = globalThis.innerHeight * 0.01
     document.documentElement.style.setProperty('--vh', `${vh}px`)
   }
   
   setVH()
-  window.addEventListener('resize', setVH)
-  window.addEventListener('orientationchange', () => {
+  globalThis.addEventListener('resize', setVH)
+  globalThis.addEventListener('orientationchange', () => {
     setTimeout(setVH, 100)
   })
 }
@@ -54,8 +54,8 @@ export const preventModalScrollIssues = (): void => {
   // Listen for modal events
   document.addEventListener('show.bs.modal', () => {
     // Store current values
-    document.body.setAttribute('data-original-overflow', originalBodyOverflow)
-    document.body.setAttribute('data-original-height', originalBodyHeight)
+    document.body.dataset.originalOverflow = originalBodyOverflow
+    document.body.dataset.originalHeight = originalBodyHeight
     
     // Set modal styles
     document.body.style.overflow = 'hidden'
@@ -64,16 +64,16 @@ export const preventModalScrollIssues = (): void => {
   
   document.addEventListener('hidden.bs.modal', () => {
     // Restore original values and ensure scrolling works
-    const storedOverflow = document.body.getAttribute('data-original-overflow') || 'auto'
-    const storedHeight = document.body.getAttribute('data-original-height') || 'auto'
+    const storedOverflow = document.body.dataset.originalOverflow || 'auto'
+    const storedHeight = document.body.dataset.originalHeight || 'auto'
     
     document.body.style.overflow = storedOverflow
     document.body.style.height = storedHeight;
     (document.body.style as any).webkitOverflowScrolling = 'touch'
     
     // Clean up attributes
-    document.body.removeAttribute('data-original-overflow')
-    document.body.removeAttribute('data-original-height')
+    delete document.body.dataset.originalOverflow
+    delete document.body.dataset.originalHeight
     
     // Force re-enable scrolling after modal closes
     setTimeout(() => {

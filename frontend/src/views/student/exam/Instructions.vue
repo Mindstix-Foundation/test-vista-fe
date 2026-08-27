@@ -1,5 +1,6 @@
 <template>
   <div class="instructions-page">
+    <AppBreadcrumb />
     <!-- Main Content -->
     <div class="container mt-1 mb-1 px-2 px-md-3">
       <div class="instructions-container">
@@ -13,9 +14,9 @@
 
         <!-- Loading State -->
         <div v-if="isLoading" class="text-center py-3 py-md-4">
-          <div class="spinner-border" role="status">
+          <output class="spinner-border">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-2 mb-0">Loading exam instructions...</p>
         </div>
 
@@ -62,6 +63,9 @@
           <div class="fullscreen-warning text-center mb-2">
             <h6 class="mb-1 small-title"><i class="bi bi-fullscreen"></i> Fullscreen Mode Required</h6>
             <p class="mb-0 small">This exam must be taken in fullscreen mode. Click "Enter Fullscreen" below to continue.</p>
+            <p v-if="fullscreenBypass" class="mb-0 small text-warning mt-1">
+              Fullscreen could not be enabled on this browser. You may start the exam with a warning.
+            </p>
           </div>
 
           <!-- Scrollable Instructions Container -->
@@ -84,6 +88,39 @@
                   <p class="mb-0 small">
                     This exam has negative marking. Each wrong answer will deduct 
                     <strong>{{ examInstructions.negative_marks_per_question || 0.25 }} marks</strong>.
+                  </p>
+                </div>
+
+                <!-- Paper Sections (competitive/entrance mocks) -->
+                <div v-if="examInstructions.sections && examInstructions.sections.length" class="mb-2">
+                  <h6 class="mb-1 small-title"><i class="bi bi-layout-three-columns"></i> Paper Sections</h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-1 small">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Section</th>
+                          <th class="text-center">Questions</th>
+                          <th class="text-center">Marks/Q</th>
+                          <th class="text-center">Type</th>
+                          <th class="text-center">Time Limit</th>
+                          <th class="text-center">Cutoff</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="section in examInstructions.sections" :key="section.id">
+                          <td>{{ section.name }}</td>
+                          <td class="text-center">{{ section.total_questions }}</td>
+                          <td class="text-center">{{ section.marks_per_question }}</td>
+                          <td class="text-center">{{ section.answer_format === 'NUMERIC' ? 'Numerical' : 'MCQ' }}</td>
+                          <td class="text-center">{{ section.time_limit_minutes ? `${section.time_limit_minutes} min` : '—' }}</td>
+                          <td class="text-center">{{ section.qualifying_marks ?? '—' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p v-if="hasSectionTiming" class="mb-0 small text-danger">
+                    <i class="bi bi-stopwatch me-1"></i>
+                    Sections with a time limit lock automatically once their time is over — answer them within their globalThis.
                   </p>
                 </div>
 
@@ -171,9 +208,9 @@
                   class="btn btn-success start-exam-btn btn-compact" 
                   :class="isFullscreenSupported ? 'flex-fill' : 'w-100'"
                   @click="startExam" 
-                  :disabled="(!isFullscreen && isFullscreenSupported) || isStarting"
+                  :disabled="(!canStartExam) || isStarting"
                 >
-                  <span v-if="isStarting" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                  <output v-if="isStarting" class="spinner-border spinner-border-sm me-2"></output>
                   <i v-else class="bi bi-play-circle-fill me-2"></i>
                   {{ isStarting ? 'Starting...' : 'Start Exam' }}
                 </button>
@@ -193,9 +230,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import testAssignmentService, { type ExamInstructions } from '@/services/testAssignmentService'
+import AppBreadcrumb from '@/components/common/AppBreadcrumb.vue'
 
 // Component name
 defineOptions({
@@ -224,15 +262,28 @@ const isLoading = ref(false)
 const isStarting = ref(false)
 const error = ref('')
 const examInstructions = ref<ExamInstructions>({} as ExamInstructions)
+const fullscreenBypass = ref(false)
+
+const hasSectionTiming = computed(() =>
+  (examInstructions.value.sections ?? []).some(section => section.time_limit_minutes)
+)
 
 // Device detection
 const isIOSDevice = ref(false)
 const isFullscreenSupported = ref(true)
 
+const canStartExam = computed(
+  () =>
+    !isFullscreenSupported.value ||
+    isIOSDevice.value ||
+    isFullscreen.value ||
+    fullscreenBypass.value,
+)
+
 // Methods
 const detectDevice = () => {
   const userAgent = navigator.userAgent.toLowerCase()
-  isIOSDevice.value = /iphone|ipod/.test(userAgent) && !window.MSStream
+  isIOSDevice.value = /iphone|ipod/.test(userAgent) && !globalThis.MSStream
   
   // Check if fullscreen API is actually supported
   const elem = document.documentElement as FullscreenElement
@@ -274,28 +325,51 @@ const goBack = () => {
 }
 
 const toggleFullscreen = () => {
-  if (!isFullscreen.value) {
-    enterFullscreen()
-  } else {
+  if (isFullscreen.value) {
     exitFullscreen()
+  } else {
+    enterFullscreen()
   }
 }
 
-const enterFullscreen = () => {
+const enterFullscreen = async () => {
   // Skip fullscreen for iOS devices since it's not supported
   if (isIOSDevice.value || !isFullscreenSupported.value) {
     console.log('Fullscreen not supported on this device, proceeding without fullscreen')
+    fullscreenBypass.value = true
+    sessionStorage.setItem('examFullscreenBypass', '1')
     return
   }
-  
+
   const elem = document.documentElement as FullscreenElement
-  
-  if (elem.requestFullscreen) {
-    elem.requestFullscreen()
-  } else if (elem.webkitRequestFullscreen) {
-    elem.webkitRequestFullscreen()
-  } else if (elem.msRequestFullscreen) {
-    elem.msRequestFullscreen()
+  const request =
+    elem.requestFullscreen?.bind(elem) ||
+    elem.webkitRequestFullscreen?.bind(elem) ||
+    elem.msRequestFullscreen?.bind(elem)
+
+  if (!request) {
+    fullscreenBypass.value = true
+    sessionStorage.setItem('examFullscreenBypass', '1')
+    return
+  }
+
+  try {
+    await Promise.resolve(request())
+    globalThis.setTimeout(() => {
+      const active = !!(
+        document.fullscreenElement ||
+        (document as FullscreenDocument).webkitFullscreenElement ||
+        (document as FullscreenDocument).msFullscreenElement
+      )
+      if (!active) {
+        fullscreenBypass.value = true
+        sessionStorage.setItem('examFullscreenBypass', '1')
+      }
+    }, 700)
+  } catch (e) {
+    console.warn('Fullscreen request failed; allowing start with warning', e)
+    fullscreenBypass.value = true
+    sessionStorage.setItem('examFullscreenBypass', '1')
   }
 }
 
@@ -311,8 +385,13 @@ const exitFullscreen = () => {
 }
 
 const startExam = async () => {
-  // Only check fullscreen for devices that support it
-  if (!isIOSDevice.value && isFullscreenSupported.value && !isFullscreen.value) {
+  // Only check fullscreen for devices that support it (unless bypass after failed request)
+  if (
+    !isIOSDevice.value &&
+    isFullscreenSupported.value &&
+    !isFullscreen.value &&
+    !fullscreenBypass.value
+  ) {
     alert('Please enable fullscreen mode before starting the exam.')
     return
   }
@@ -323,6 +402,14 @@ const startExam = async () => {
       'Note: Due to iOS limitations, this exam cannot run in fullscreen mode. ' +
       'Please ensure you have a stable internet connection and avoid switching apps during the exam. ' +
       'Do you want to continue?'
+    )
+    if (!proceed) {
+      return
+    }
+  } else if (fullscreenBypass.value && !isFullscreen.value) {
+    const proceed = confirm(
+      'Fullscreen could not be enabled on this browser. ' +
+      'You can continue, but stay on this tab for the duration of the exam. Continue?'
     )
     if (!proceed) {
       return

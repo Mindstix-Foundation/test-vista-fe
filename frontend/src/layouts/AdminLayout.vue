@@ -1,10 +1,7 @@
 <template>
-  <div>
-    <NavBar />
-    <router-view></router-view>
-  </div>
+  <AppShell portal="admin" />
 </template>
 
 <script setup lang="ts">
-import NavBar from '@/components/NavBar.vue'
+import AppShell from '@/components/layout/AppShell.vue'
 </script>

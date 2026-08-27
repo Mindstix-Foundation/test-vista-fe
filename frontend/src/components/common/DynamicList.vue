@@ -124,14 +124,14 @@ const startAutoScroll = (direction: 'up' | 'down', speed: number = 5) => {
   // Add visual indicator class to body
   document.body.classList.add(`auto-scrolling-${direction}`)
   
-  autoScrollInterval.value = window.setInterval(() => {
+  autoScrollInterval.value = globalThis.setInterval(() => {
     if (!isDragging.value) {
       stopAutoScroll()
       return
     }
     
     const scrollAmount = direction === 'up' ? -speed : speed
-    window.scrollBy(0, scrollAmount)
+    globalThis.scrollBy(0, scrollAmount)
   }, 16) // ~60fps
 }
 
@@ -148,7 +148,7 @@ const stopAutoScroll = () => {
 const handleDragOverForAutoScroll = (event: DragEvent) => {
   if (!isDragging.value) return
   
-  const viewportHeight = window.innerHeight
+  const viewportHeight = globalThis.innerHeight
   const mouseY = event.clientY
   const scrollThreshold = 100 // pixels from edge to start scrolling
   const maxSpeed = 15
@@ -161,7 +161,7 @@ const handleDragOverForAutoScroll = (event: DragEvent) => {
   stopAutoScroll()
   
   // Check if we should scroll up
-  if (distanceFromTop < scrollThreshold && window.scrollY > 0) {
+  if (distanceFromTop < scrollThreshold && globalThis.scrollY > 0) {
     const speed = Math.max(3, maxSpeed * (1 - distanceFromTop / scrollThreshold))
     startAutoScroll('up', speed)
   }
@@ -242,9 +242,7 @@ const handleBlur = (index: number) => {
     
     // Update sequence numbers if draggable
     if (props.draggable) {
-      items.value.forEach((item, idx) => {
-        item.sequence_number = idx + 1
-      })
+      updateSequenceNumbers()
     }
   }
 }
@@ -334,9 +332,9 @@ const focusInput = (index: number) => {
 // Update sequence numbers if draggable
 const updateSequenceNumbers = () => {
   if (props.draggable) {
-    items.value.forEach((item, idx) => {
+    for (const [idx, item] of items.value.entries()) {
       item.sequence_number = idx + 1
-    })
+    }
   }
 }
 
@@ -371,7 +369,7 @@ const dragStart = (event: DragEvent, index: number) => {
       
       // Remove the ghost element after a delay
       setTimeout(() => {
-        document.body.removeChild(ghostElement)
+        ghostElement.remove()
       }, 0)
     }
     
@@ -381,11 +379,11 @@ const dragStart = (event: DragEvent, index: number) => {
         itemContainer.classList.add('dragging')
         
         // Add a visual indicator to all other items
-        document.querySelectorAll('.item-container').forEach(el => {
+        for (const el of document.querySelectorAll('.item-container')) {
           if (el !== itemContainer) {
             el.classList.add('item-not-dragged')
           }
-        })
+        }
       }
     }, 0)
   }
@@ -393,22 +391,22 @@ const dragStart = (event: DragEvent, index: number) => {
 
 // Clear drag-over state from all item containers
 const clearDragOverState = () => {
-  document.querySelectorAll('.item-container').forEach(item => {
+  for (const item of document.querySelectorAll('.item-container')) {
     item.classList.remove('drag-over')
-  })
+  }
 }
 
 // Handle item shifting animation between source and target
 const updateItemShiftingClasses = (start: number, end: number, sourceIndex: number) => {
   const containers = document.querySelectorAll('.item-container')
-  containers.forEach((container, idx) => {
+  for (const [idx, container] of containers.entries()) {
     const shouldShift = idx >= start && 
                         idx <= end && 
                         idx !== sourceIndex && 
                         !isLastEmptyField(idx)
     
     container.classList.toggle('item-shifting', shouldShift)
-  })
+  }
 }
 
 const dragEnter = (event: DragEvent, index: number) => {
@@ -443,9 +441,9 @@ const dragEnd = () => {
     
     // Reset all classes and states
     const itemContainers = document.querySelectorAll('.item-container')
-    itemContainers.forEach(item => {
+    for (const item of itemContainers) {
       item.classList.remove('dragging', 'drag-over', 'item-not-dragged', 'item-shifting')
-    })
+    }
     draggedItemIndex.value = null
     dragOverItemIndex.value = null
   }
@@ -471,9 +469,7 @@ const drop = (event: DragEvent, dropIndex: number) => {
 
   // Update sequence numbers for all items
   if (props.draggable) {
-    items.value.forEach((item, idx) => {
-      item.sequence_number = idx + 1
-    })
+    updateSequenceNumbers()
   }
 
   // Clear drag state

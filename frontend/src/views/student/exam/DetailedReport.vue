@@ -1,12 +1,13 @@
 <template>
   <div class="detailed-report-page">
+    <AppBreadcrumb />
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
       <div class="container">
         <div class="text-center">
-          <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+          <output class="spinner-border text-primary" style="width: 3rem; height: 3rem;">
             <span class="visually-hidden">Loading detailed report...</span>
-          </div>
+          </output>
           <p class="loading-text mt-3">Loading your detailed exam report...</p>
         </div>
       </div>
@@ -202,6 +203,8 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import testAssignmentService from '@/services/testAssignmentService'
+import AppBreadcrumb from '@/components/common/AppBreadcrumb.vue'
+import { useExamSessionGuard } from '@/composables/useExamSessionGuard'
 
 // Types
 interface Question {
@@ -235,12 +238,6 @@ interface DetailedReport {
   questions: Question[]
 }
 
-interface FullscreenDocument extends Document {
-  webkitFullscreenElement?: Element
-  msFullscreenElement?: Element
-  webkitExitFullscreen?: () => Promise<void>
-  msExitFullscreen?: () => Promise<void>
-}
 
 const route = useRoute()
 const router = useRouter()
@@ -250,9 +247,13 @@ const isLoading = ref(true)
 const error = ref('')
 const detailedReport = ref<DetailedReport>({} as DetailedReport)
 
-// Device detection
-const isIOSDevice = ref(false)
-const showLeaveConfirmation = ref(false)
+const {
+  isIOSDevice,
+  showLeaveConfirmation,
+  detectDevice,
+  exitFullscreen,
+  blockBackNavigation,
+} = useExamSessionGuard()
 
 // Computed properties
 const calculatedAccuracy = computed(() => {
@@ -374,56 +375,6 @@ const goBack = () => {
   router.push({
     path: '/student/exam/result',
     query: { attemptId: route.query.attemptId }
-  })
-}
-
-const detectDevice = () => {
-  const userAgent = navigator.userAgent.toLowerCase()
-  isIOSDevice.value = /iphone|ipod/.test(userAgent) && !window.MSStream
-}
-
-const exitFullscreen = () => {
-  // Skip fullscreen exit for iOS devices since it's not supported
-  if (isIOSDevice.value) {
-    console.log('Fullscreen not supported on iOS device')
-    return
-  }
-  
-  const doc = document as FullscreenDocument
-  if (document.fullscreenElement ||
-      doc.webkitFullscreenElement ||
-      doc.msFullscreenElement) {
-    
-    if (document.exitFullscreen) {
-      document.exitFullscreen()
-    } else if (doc.webkitExitFullscreen) {
-      doc.webkitExitFullscreen()
-    } else if (doc.msExitFullscreen) {
-      doc.msExitFullscreen()
-    }
-  }
-}
-
-const blockBackNavigation = () => {
-  window.history.pushState(null, '', window.location.href)
-  
-  window.addEventListener('popstate', () => {
-    window.history.pushState(null, '', window.location.href)
-    showLeaveConfirmation.value = true
-  })
-  
-  window.addEventListener('keydown', (e) => {
-    if ((e.altKey && e.key === 'ArrowLeft') ||
-        (e.altKey && e.key === 'ArrowRight') ||
-        e.key === 'F5' ||
-        (e.ctrlKey && e.key === 'r')) {
-      e.preventDefault()
-      return false
-    }
-  })
-  
-  document.addEventListener('contextmenu', (e) => {
-    e.preventDefault()
   })
 }
 

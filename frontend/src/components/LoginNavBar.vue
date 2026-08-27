@@ -6,36 +6,37 @@
         <img src="@/assets/Test.jpg" alt="Test Vista Logo" class="brand-logo" />
       </router-link>
 
-      <!-- Teacher/Admin Login Button -->
-      <div class="navbar-nav">
-        <router-link 
-          to="/teacher-admin-login" 
-          class="btn btn-outline-light login-btn"
-          v-if="!isTeacherAdminLoginPage"
+      <!-- Auth links -->
+      <div class="navbar-nav d-flex flex-row gap-2 align-items-center">
+        <router-link
+          v-if="!isRegisterPage && !isLoginPage"
+          to="/register"
+          class="btn btn-light login-btn"
         >
-          Teacher/Admin Login
+          Create account
         </router-link>
-        <router-link 
-          to="/login" 
+        <router-link
+          v-if="!isLoginPage && !isRegisterPage"
+          to="/login"
           class="btn btn-outline-light login-btn"
-          v-if="isTeacherAdminLoginPage"
         >
-          Student Login
+          Log In
         </router-link>
       </div>
     </div>
   </nav>
+  <AppBreadcrumb />
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import AppBreadcrumb from '@/components/common/AppBreadcrumb.vue'
 
 const route = useRoute()
 
-const isTeacherAdminLoginPage = computed(() => {
-  return route.path === '/teacher-admin-login'
-})
+const isLoginPage = computed(() => route.path === '/login')
+const isRegisterPage = computed(() => route.path === '/register')
 </script>
 
 <style scoped>

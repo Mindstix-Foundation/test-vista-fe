@@ -159,12 +159,12 @@ const fetchTeacherData = async (id: string) => {
     
     // Process and group subjects by standard
     const standardSubjects = new Map()
-    teachingAssignments.forEach((assignment: TeachingAssignmentResponse) => {
+    for (const assignment of teachingAssignments) {
       const standardId = assignment.standard.id
       const schoolStandardId = standardIdToSchoolStandardId.get(standardId)
       if (!schoolStandardId) {
         console.warn(`No school standard ID found for standard ID ${standardId}`)
-        return
+        continue
       }
 
       const standardName = assignment.standard.name
@@ -179,7 +179,7 @@ const fetchTeacherData = async (id: string) => {
         id: assignment.subject.id, // Use the actual subject ID
         name: assignment.subject.name,
       })
-    })
+    }
 
     // Convert Map to array format for component
     const groupedSubjectsArray = Array.from(standardSubjects.entries()).map(
@@ -214,7 +214,7 @@ const fetchTeacherData = async (id: string) => {
           mediumStandardSubjectId: assignment.subject.id, // Use the actual subject ID
         };
       }).filter((assignment: TeacherSubjectAssignment | null): assignment is TeacherSubjectAssignment => assignment !== null),
-      userId: parseInt(id),
+      userId: Number.parseInt(id),
       groupedSubjects: groupedSubjectsArray,
       schoolStandards: schoolStandards.map((standard: SchoolStandard) => ({
         id: standard.id, // Use the school_standard_id
@@ -242,7 +242,7 @@ const cleanupAndNavigate = () => {
     operationResultModal?.hide()
 
     // Remove backdrop manually
-    document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove())
+    for (const backdrop of document.querySelectorAll('.modal-backdrop')) backdrop.remove();
 
     // Remove modal-open class and inline styles from body
     document.body.classList.remove('modal-open')
@@ -277,7 +277,7 @@ const updateTeacher = async (userId: string, formData: TeacherFormData) => {
     const standardSubjectsMap = new Map<number, number[]>();
     
     // Group subject IDs by schoolStandardId
-    formData.teacherSubjects.forEach(subject => {
+    for (const subject of formData.teacherSubjects) {
       const schoolStandardId = subject.schoolStandardId;
       if (!standardSubjectsMap.has(schoolStandardId)) {
         standardSubjectsMap.set(schoolStandardId, []);
@@ -285,7 +285,7 @@ const updateTeacher = async (userId: string, formData: TeacherFormData) => {
       
       // Use the subject ID directly (mediumStandardSubjectId is now the actual subject ID)
       standardSubjectsMap.get(schoolStandardId)?.push(subject.mediumStandardSubjectId);
-    });
+    }
     
     // Convert to the expected format for the API
     const standard_subjects = Array.from(standardSubjectsMap.entries()).map(([schoolStandardId, subjectIds]) => ({
@@ -355,14 +355,14 @@ const processSuccessfulChanges = (changes: Array<{ type: string; message: string
   });
   
   // Add operation results for each change
-  changes.forEach(change => {
+  for (const change of changes) {
     const operation = determineOperationType(change);
     
     operationResults.value.push({
       operation: formatOperationMessage(operation, true),
       status: 'success',
     });
-  });
+  }
   
   console.log('Teacher updated successfully:', result);
 }

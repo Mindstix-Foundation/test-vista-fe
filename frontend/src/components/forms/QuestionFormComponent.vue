@@ -2,7 +2,7 @@
   <div class="container">
     <div class="container mb-4">
       <div class="row g-2 mb-2 justify-content-center">
-        <div class="col-md-5">
+        <div v-if="!examMode" class="col-md-5">
           <SearchableDropdown
             v-if="useSearchableDropdown"
             id="filterTopic"
@@ -21,7 +21,7 @@
             <label for="filterTopic" class="form-label">Topic</label>
           </div>
         </div>
-        <div class="col-md-5">
+        <div :class="examMode ? 'col-md-10' : 'col-md-5'">
           <SearchableDropdown
             v-if="useSearchableDropdown"
             id="filterType"
@@ -30,15 +30,44 @@
             :items="questionTypeItems"
             v-model="selectedTypeObject"
             @change="handleTypeChange"
-            :disabled="!selectedTopic || isEditMode"
+            :disabled="(!examMode && !selectedTopic) || isEditMode"
             required
           />
           <div v-else class="form-floating">
-            <select id="filterType" class="form-select" v-model="selectedType" @change="toggleQuestionContainer" :disabled="!selectedTopic || isEditMode">
+            <select id="filterType" class="form-select" v-model="selectedType" @change="toggleQuestionContainer" :disabled="(!examMode && !selectedTopic) || isEditMode">
               <option value="">Select Type</option>
               <option v-for="type in questionTypes" :key="type" :value="type">{{ type }}</option>
             </select>
             <label for="filterType" class="form-label">Type</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="selectedType === 'Multiple Choice Question (MCQ)' && !isEditMode"
+      class="container mb-4"
+    >
+      <div class="row justify-content-center">
+        <div class="col-md-10">
+          <div class="form-check form-switch passage-link-toggle">
+            <input
+              id="passageLinked"
+              class="form-check-input"
+              type="checkbox"
+              role="switch"
+              aria-checked="false"
+              :aria-checked="passageLinked ? 'true' : 'false'"
+              :checked="passageLinked"
+              @change="handlePassageLinkedChange"
+            />
+            <label class="form-check-label fw-semibold" for="passageLinked">
+              Passage linked
+            </label>
+            <div class="form-text">
+              Use one shared passage for two or more MCQs. The linked questions remain
+              consecutive whenever they are selected for a test.
+            </div>
           </div>
         </div>
       </div>
@@ -77,7 +106,7 @@
               
               <!-- Show uploaded image from store if exists -->
               <div v-else-if="imageUploadStore.getQuestionImage()" class="uploaded-image-preview mb-2">
-                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded Question Image" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
+                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded question" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
                 <div class="d-flex justify-content-between align-items-center">
                   <p class="text-muted mb-0"><small>Uploaded: {{ imageUploadStore.getQuestionImage()?.file.name }}</small></p>
                   <button type="button" class="btn btn-danger btn-sm" @click="removeUploadedQuestionImage">
@@ -116,7 +145,11 @@
       </div>
     </div>
 
-    <div class="container" id="mcqQuestion" v-show="selectedType === 'Multiple Choice Question (MCQ)'">
+    <div
+      class="container"
+      id="mcqQuestion"
+      v-show="selectedType === 'Multiple Choice Question (MCQ)' && !passageLinked"
+    >
       <div class="row justify-content-center">
         <div class="col col-12 col-sm-10 ">
           <form @submit.prevent="saveQuestion">
@@ -133,7 +166,7 @@
                 </div>
               </div>
               <div v-else-if="imageUploadStore.getQuestionImage()" class="uploaded-image-preview mb-2">
-                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded Question Image" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
+                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded question" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
                 <div class="d-flex justify-content-between align-items-center">
                   <p class="text-muted mb-0"><small>Uploaded: {{ imageUploadStore.getQuestionImage()?.file.name }}</small></p>
                   <button type="button" class="btn btn-danger btn-sm" @click="removeUploadedQuestionImage">
@@ -280,7 +313,7 @@
                 </div>
               </div>
               <div v-else-if="imageUploadStore.getQuestionImage()" class="uploaded-image-preview mb-2">
-                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded Question Image" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
+                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded question" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
                 <div class="d-flex justify-content-between align-items-center">
                   <p class="text-muted mb-0"><small>Uploaded: {{ imageUploadStore.getQuestionImage()?.file.name }}</small></p>
                   <button type="button" class="btn btn-danger btn-sm" @click="removeUploadedQuestionImage">
@@ -339,7 +372,7 @@
                 </div>
               </div>
               <div v-else-if="imageUploadStore.getQuestionImage()" class="uploaded-image-preview mb-2">
-                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded Question Image" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
+                <img :src="imageUploadStore.getQuestionImage()?.url" alt="Uploaded question" class="img-fluid mb-2" style="max-height: 200px; border-radius: 5px;"/>
                 <div class="d-flex justify-content-between align-items-center">
                   <p class="text-muted mb-0"><small>Uploaded: {{ imageUploadStore.getQuestionImage()?.file.name }}</small></p>
                   <button type="button" class="btn btn-danger btn-sm" @click="removeUploadedQuestionImage">
@@ -437,6 +470,7 @@ import { useRouter } from 'vue-router'
 
 const props = defineProps<{
   isEditMode?: boolean
+  examMode?: boolean
   questionId?: number
   chapterId?: string | number
   useSearchableDropdown?: boolean
@@ -444,6 +478,7 @@ const props = defineProps<{
   initialCorrectOption?: number
   initialOptionImages?: string[]
   initialOptionImageIds?: (number | null)[]
+  passageLinked?: boolean
   questionBankData?: {
     boardId: string
     boardName: string
@@ -515,6 +550,7 @@ const emit = defineEmits<{
   (e: 'questionImageCancelled'): void
   (e: 'optionImageCancelled', optionIndex: number): void
   (e: 'typeChanged', questionType: string): void
+  (e: 'update:passageLinked', value: boolean): void
 }>()
 
 const router = useRouter()
@@ -565,12 +601,20 @@ function handleTopicChange(item: Item | null) {
 function handleTypeChange(item: Item | null) {
   if (item) {
     selectedType.value = item.name as string
+    if (selectedType.value !== 'Multiple Choice Question (MCQ)' && props.passageLinked) {
+      emit('update:passageLinked', false)
+    }
     toggleQuestionContainer()
     emit('typeChanged', selectedType.value)
   } else {
     selectedType.value = ''
+    if (props.passageLinked) emit('update:passageLinked', false)
     emit('typeChanged', '')
   }
+}
+
+function handlePassageLinkedChange(event: Event) {
+  emit('update:passageLinked', (event.target as HTMLInputElement).checked)
 }
 
 // Question models
@@ -751,11 +795,11 @@ const shouldDeleteImage = ref<boolean>(false);
 const imageUploadError = ref<string | null>(null);
 
 // Add refs to track each option image (MCQ options + match pairs)
-const mcqOptionImages = ref<(File | null)[]>(Array(20).fill(null)); // Increased size to handle all option types
+const mcqOptionImages = ref<(File | null)[]>(new Array(20).fill(null)); // Increased size to handle all option types
 
 // Add refs to track option image IDs and deletion status
-const optionImageIds = ref<(number | null)[]>(Array(20).fill(null));
-const optionImageDeleteFlags = ref<boolean[]>(Array(20).fill(false));
+const optionImageIds = ref<(number | null)[]>(new Array(20).fill(null));
+const optionImageDeleteFlags = ref<boolean[]>(new Array(20).fill(false));
 
 // Add computed properties for placeholder and label text
 const getPlaceholderText = computed(() => {
@@ -791,11 +835,11 @@ async function fetchQuestionTypes() {
       questionTypes.value = response.data.map((type: QuestionType) => type.type_name || '')
 
       // Store the mapping of type names to IDs
-      response.data.forEach((type: QuestionType) => {
+      for (const type of response.data) {
         if (type.type_name && type.id) {
           questionTypeMap.value.set(type.type_name, type.id)
         }
-      })
+      }
     } else {
       // Fallback to default question types if API fails
       questionTypes.value = [
@@ -835,7 +879,10 @@ async function fetchQuestionTypes() {
   }
 }
 
+const examMode = computed(() => props.examMode === true)
+
 async function fetchTopics() {
+  if (examMode.value) return
   try {
     // Get chapter ID from props or from questionBankData
     const chapterId = props.chapterId ?? (props.questionBankData?.chapterId ?? null);
@@ -889,11 +936,11 @@ function processApiResponse(response) {
 
 function mapTopicIdsToNames(topicsData) {
   // Store the mapping of topic names to IDs
-  topicsData.forEach((topic: Topic) => {
+  for (const topic of topicsData) {
     if (topic.name && topic.id) {
       topicMap.value.set(topic.name, topic.id);
     }
-  });
+  }
 }
 
 function tryLocalStorageFallback() {
@@ -920,12 +967,12 @@ function extractTopicsFromLocalStorage(storedQuestions) {
   const uniqueTopics = new Set<string>();
 
   // Extract topics from questions
-  questions.forEach((q: { topic?: string; topics?: { topic: string }[] }) => {
+  for (const q of questions as { topic?: string; topics?: { topic: string }[] }[]) {
     if (q.topic) uniqueTopics.add(q.topic);
     if (q.topics) {
-      q.topics.forEach((t: { topic: string }) => uniqueTopics.add(t.topic));
+      for (const t of q.topics) uniqueTopics.add(t.topic);
     }
-  });
+  }
 
   const localTopics = Array.from(uniqueTopics);
   
@@ -1045,14 +1092,14 @@ function processMCQQuestion(questionData: QuestionResponse, questionText: string
 }
 
 function processMCQOptions(options: QuestionResponse['question_options']) {
-  options.forEach((option, index) => {
+  for (const [index, option] of options.entries()) {
     if (index < 4) {
       mcqQuestion.value.options[index] = option.option_text
       if (option.is_correct) {
         mcqQuestion.value.correctOption = (index + 1).toString()
       }
     }
-  })
+  }
 }
 
 function processFillInBlanksQuestion(questionData: QuestionResponse, questionText: string) {
@@ -1111,10 +1158,10 @@ function resetMatchPairs() {
 }
 
 function processMatchPairsImages(matchPairs: MatchPair[]) {
-  matchPairs.forEach((pair, index) => {
+  for (const [index, pair] of matchPairs.entries()) {
     processLeftImage(pair, index)
     processRightImage(pair, index)
-  })
+  }
 }
 
 function processLeftImage(pair: MatchPair, index: number) {
@@ -1204,7 +1251,7 @@ function removeInput(side: 'lhs' | 'rhs', index: number) {
 }
 
 function validateBasicFields(): boolean {
-  if (selectedTopic.value === '') {
+  if (!examMode.value && selectedTopic.value === '') {
     alert('Please select a topic')
     return false
   }
@@ -1292,7 +1339,7 @@ function addQuestionTypeSpecificData(payload: SavePayload): void {
       payload.questionText = mcqQuestion.value.question
       payload.additionalData = {
         options: mcqQuestion.value.options,
-        correctOption: parseInt(mcqQuestion.value.correctOption) - 1
+        correctOption: Number.parseInt(mcqQuestion.value.correctOption, 10) - 1
       }
       break
     case 'Fill in the Blanks':
@@ -1679,9 +1726,9 @@ function handleClearOptionImageEvent(event: Event) {
 // New helper functions to reduce complexity in onMounted
 function initializeImageRefs() {
   questionImageFile.value = null;
-  mcqOptionImages.value = Array(20).fill(null);
-  optionImageIds.value = Array(20).fill(null);
-  optionImageDeleteFlags.value = Array(20).fill(false);
+  mcqOptionImages.value = new Array(20).fill(null);
+  optionImageIds.value = new Array(20).fill(null);
+  optionImageDeleteFlags.value = new Array(20).fill(false);
   imageUploadError.value = null;
 }
 
@@ -1727,7 +1774,7 @@ function setupOptionImagePreview(optionIndex: number) {
   }
 
   // Display existing option images in the UI
-  const optionImageContainer = document.getElementById(`option${String.fromCharCode(65 + optionIndex)}ImagePreview`);
+  const optionImageContainer = document.getElementById(`option${String.fromCodePoint(65 + optionIndex)}ImagePreview`);
   if (!optionImageContainer) return;
   
   // Clear any existing content
@@ -1743,7 +1790,7 @@ function createOptionImagePreview(container: HTMLElement, imageUrl: string, opti
 
   const img = document.createElement('img');
   img.src = imageUrl;
-  img.alt = `Option ${String.fromCharCode(65 + optionIndex)} Image`;
+  img.alt = `Option ${String.fromCodePoint(65 + optionIndex)}`;
   img.className = 'img-fluid mb-2';
   img.style.maxHeight = '100px';
   img.style.borderRadius = '5px';
@@ -1786,9 +1833,9 @@ function initializeOptionImages() {
 
 function initializeTextareas() {
   setTimeout(() => {
-    document.querySelectorAll('textarea').forEach(textarea => {
-      textarea.style.height = textarea.scrollHeight + 'px';
-    });
+    for (const textarea of document.querySelectorAll('textarea')) {
+      (textarea as HTMLTextAreaElement).style.height = textarea.scrollHeight + 'px';
+    }
   }, 0);
 }
 
@@ -1809,14 +1856,14 @@ onMounted(() => {
   initializeTextareas();
   
   // Add event listeners for image cancellation
-  window.addEventListener('clearQuestionImage', clearQuestionImage);
-  window.addEventListener('clearOptionImage', handleClearOptionImageEvent);
+  globalThis.addEventListener('clearQuestionImage', clearQuestionImage);
+  globalThis.addEventListener('clearOptionImage', handleClearOptionImageEvent);
 });
 
 // Add onUnmounted to clean up event listeners
 onUnmounted(() => {
-  window.removeEventListener('clearQuestionImage', clearQuestionImage);
-  window.removeEventListener('clearOptionImage', handleClearOptionImageEvent);
+  globalThis.removeEventListener('clearQuestionImage', clearQuestionImage);
+  globalThis.removeEventListener('clearOptionImage', handleClearOptionImageEvent);
 });
 
 // Functions to handle cancellation of image uploads
@@ -1830,11 +1877,11 @@ function clearQuestionImage() {
   existingImageName.value = null
   // Find and clear the file input
   const questionFileInputs = document.querySelectorAll('input[type="file"][accept*="image"]')
-  questionFileInputs.forEach(input => {
+  for (const input of questionFileInputs) {
     if (input.id.includes('question') || input.id.includes('mcq') || input.id.includes('fillInTheBlank') || input.id.includes('matchPairs')) {
       (input as HTMLInputElement).value = ''
     }
-  })
+  }
 }
 
 // Method to get selected topic ID for CSV upload

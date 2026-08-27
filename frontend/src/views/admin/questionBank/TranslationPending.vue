@@ -4,18 +4,30 @@
 
     <div class="container">
       <div class="row g-2 justify-content-end">
-        <router-link class="btn btn-close" :to="{ name: 'questionDashboard', query: { unverified: 'true' } }" aria-label="Close"></router-link>
+        <router-link class="btn btn-close" :to="closeLink" aria-label="Close"></router-link>
       </div>
       <div class="row justify-content-center align-items-center my-2">
         <div class="col col-12 col-sm-10 ">
-          <p class="text-muted text-start fs-5 m-0">
-            <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
-            <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
-          </p>
-          <h4 class="fw-bolder text-start text-dark m-0 ">
-            Standard {{ questionBankData.standardName }}
-            <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
-          </h4>
+          <template v-if="isExamScope">
+            <p class="text-muted text-start fs-5 m-0">
+              {{ questionBankData.programLabel }}
+              <span v-if="questionBankData.mediumName"> | {{ questionBankData.mediumName }}</span>
+            </p>
+            <h4 class="fw-bolder text-start text-dark m-0 ">
+              {{ questionBankData.nodeName }}
+              <span class="d-block text-start text-secondary">Competitive / Entrance syllabus</span>
+            </h4>
+          </template>
+          <template v-else>
+            <p class="text-muted text-start fs-5 m-0">
+              <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
+              <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
+            </p>
+            <h4 class="fw-bolder text-start text-dark m-0 ">
+              Standard {{ questionBankData.standardName }}
+              <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
+            </h4>
+          </template>
           <h4 class="text-left fw-bolder text-uppercase mb-2">Translation Pending</h4>
         </div>
       </div>
@@ -82,7 +94,7 @@
               <div class="card-body">
                 <div class="container p-0">
                   <div class="row g-2 mb-2">
-                    <div class="col-md-6">
+                    <div v-if="!isExamScope" class="col-md-6">
                       <SearchableDropdown
                         id="filterTopic"
                         label="Filter by Topic"
@@ -230,12 +242,15 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import { Collapse } from 'bootstrap'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
 import QuestionDisplay from '@/components/questiondisplay/QuestionDisplay.vue'
 import { useToastStore } from '@/stores/toast'
+import { examCatalogService } from '@/services/examCatalogService'
+import type { SyllabusNode } from '@/types/exam'
+import { findItemInTree, resolveExamChapterId } from '@/utils/examSyllabus'
 
 console.log('QuestionDisplay component imported:', !!QuestionDisplay);
 
@@ -371,6 +386,7 @@ defineOptions({
 })
 
 const router = useRouter()
+const route = useRoute()
 const toastStore = useToastStore()
 
 // Add initial loading state
@@ -378,18 +394,140 @@ const isInitialLoading = ref(true)
 
 // Data from localStorage
 const questionBankData = ref({
+  scope: 'board' as 'board' | 'exam',
   boardId: '',
   boardName: '',
   mediumId: '',
   mediumName: '',
+  languageId: '',
+  languageName: '',
   standardId: '',
   standardName: '',
   subjectId: '',
   subjectName: '',
   chapterId: '',
   chapterName: '',
-  mediumStandardSubjectId: null
+  topicId: '',
+  topicName: '',
+  mediumStandardSubjectId: null as number | null,
+  programId: '',
+  programLabel: '',
+  stageId: '',
+  stageName: '',
+  nodeId: '',
+  nodeName: '',
 })
+
+function examScopeQuery(): Record<string, string> {
+  const q: Record<string, string> = {
+    scope: 'exam',
+    programId: String(questionBankData.value.programId),
+    chapterId: String(questionBankData.value.chapterId || resolveExamChapterId(questionBankData.value) || ''),
+  }
+  if (questionBankData.value.stageId) q.stageId = String(questionBankData.value.stageId)
+  if (questionBankData.value.subjectId) q.subjectId = String(questionBankData.value.subjectId)
+  if (questionBankData.value.topicId) q.topicId = String(questionBankData.value.topicId)
+  if (questionBankData.value.languageId) q.languageId = String(questionBankData.value.languageId)
+  if (questionBankData.value.mediumId) {
+    q.mediumId = String(questionBankData.value.mediumId)
+    if (questionBankData.value.mediumName) q.mediumName = questionBankData.value.mediumName
+  }
+  return q
+}
+
+const isExamScope = computed(() => {
+  const data = questionBankData.value
+  return data.scope === 'exam' || (!!data.programId && !!resolveExamChapterId(data))
+})
+
+const closeLink = computed(() => {
+  if (isExamScope.value) {
+    return { name: 'questionDashboard', query: examScopeQuery() }
+  }
+  return { name: 'questionDashboard', query: { unverified: 'true' } }
+})
+
+function findNodeName(nodes: SyllabusNode[], id: number): string | null {
+  for (const node of nodes) {
+    if (node.id === id) return node.name
+    if (node.children?.length) {
+      const found = findNodeName(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+async function hydrateExamContext(programId: number, chapterId: number, stageId?: number | null) {
+  const program = await examCatalogService.getProgram(programId)
+  const tree = await examCatalogService.getSyllabusTree(programId, stageId ?? undefined)
+  const programLabel = `${program.exam_body?.abbreviation ?? ''} — ${program.name}`.trim()
+  const chapter = findItemInTree(tree, chapterId)
+  const chapterName = chapter?.name ?? 'Chapter'
+  let subjectId = ''
+  let subjectName = ''
+  let stageName = ''
+  if (chapter?.parent_id) {
+    const subject = findItemInTree(tree, chapter.parent_id)
+    if (subject) {
+      subjectId = String(subject.id)
+      subjectName = subject.name
+    }
+  }
+  if (stageId) {
+    const stages = await examCatalogService.getStages(programId)
+    stageName = stages.find((s) => s.id === stageId)?.name ?? ''
+  }
+  return {
+    scope: 'exam' as const,
+    programId: String(programId),
+    programLabel,
+    stageId: stageId ? String(stageId) : '',
+    stageName,
+    subjectId,
+    subjectName,
+    chapterId: String(chapterId),
+    chapterName,
+    nodeId: String(chapterId),
+    nodeName: chapterName,
+  }
+}
+
+function applyQuestionBankPayload(parsed: Record<string, unknown>) {
+  const inferredScope =
+    parsed.scope === 'exam' ||
+    (parsed.programId && resolveExamChapterId(parsed as { chapterId?: string; nodeId?: string; topicId?: string }) && parsed.scope !== 'board')
+      ? 'exam'
+      : 'board'
+
+  const chapterId = String(parsed.chapterId ?? '')
+  const topicId = String(parsed.topicId ?? '')
+  const nodeId = String(parsed.nodeId ?? parsed.topicId ?? parsed.chapterId ?? '')
+  questionBankData.value = {
+    scope: inferredScope,
+    boardId: String(parsed.boardId ?? ''),
+    boardName: String(parsed.boardName ?? ''),
+    mediumId: String(parsed.mediumId ?? ''),
+    mediumName: String(parsed.mediumName ?? parsed.languageName ?? ''),
+    languageId: String(parsed.languageId ?? ''),
+    languageName: String(parsed.languageName ?? parsed.mediumName ?? ''),
+    standardId: String(parsed.standardId ?? ''),
+    standardName: String(parsed.standardName ?? ''),
+    subjectId: String(parsed.subjectId ?? ''),
+    subjectName: String(parsed.subjectName ?? ''),
+    chapterId: chapterId || String(parsed.nodeId ?? ''),
+    chapterName: String(parsed.chapterName ?? parsed.nodeName ?? ''),
+    topicId,
+    topicName: String(parsed.topicName ?? ''),
+    mediumStandardSubjectId: (parsed.mediumStandardSubjectId as number | null) ?? null,
+    programId: String(parsed.programId ?? ''),
+    programLabel: String(parsed.programLabel ?? ''),
+    stageId: String(parsed.stageId ?? ''),
+    stageName: String(parsed.stageName ?? ''),
+    nodeId: nodeId || chapterId,
+    nodeName: String(parsed.nodeName ?? parsed.topicName ?? parsed.chapterName ?? ''),
+  }
+}
 
 // Questions data
 const questions = ref<Question[]>([])
@@ -644,15 +782,15 @@ async function fetchTopicsForChapter() {
 function extractTopicsFromQuestions() {
   const topicsMap = new Map<number, string>();
 
-  questions.value.forEach(q => {
+  for (const q of questions.value) {
     if (q.topics) {
-      q.topics.forEach(t => {
+      for (const t of q.topics) {
         if (t.topic && t.id) {
           topicsMap.set(t.id, t.topic);
         }
-      });
+      }
     }
-  });
+  }
 
   topicsWithIds.value = Array.from(topicsMap.entries()).map(([id, name]) => ({ id, name }));
   topics.value = Array.from(topicsMap.values());
@@ -667,16 +805,22 @@ async function fetchQuestions() {
 
     const mediumId = questionBankData.value.mediumId;
 
-    const params = {
-      chapter_id: questionBankData.value.chapterId,
+    const params: Record<string, unknown> = {
       instruction_medium_id: questionBankData.value.mediumId,
       is_verified: true,
       page: currentPage.value,
       page_size: pageSize.value,
       search: searchQuery.value ?? undefined,
-      topic_id: selectedTopic.value ?? undefined,
-      question_type_id: selectedType.value ?? undefined
-    };
+      question_type_id: selectedType.value ?? undefined,
+    }
+
+    if (isExamScope.value) {
+      const chapterId = resolveExamChapterId(questionBankData.value)
+      if (chapterId) params.syllabus_node_id = chapterId
+    } else {
+      params.chapter_id = questionBankData.value.chapterId
+      params.topic_id = selectedTopic.value ?? undefined
+    }
 
     if (sortOption.value && sortMappings[sortOption.value]) {
       params.sort_by = sortMappings[sortOption.value].sort_by;
@@ -1008,8 +1152,8 @@ function restoreSearchQueryFromQuery(searchParam) {
 
 function restorePageNumberFromQuery(pageParam) {
   if (pageParam) {
-    const pageNum = parseInt(pageParam as string, 10);
-    if (!isNaN(pageNum) && pageNum > 0) {
+    const pageNum = Number.parseInt(pageParam as string, 10);
+    if (!Number.isNaN(pageNum) && pageNum > 0) {
       console.log('TranslationPending - Restoring page number:', pageNum);
       currentPage.value = pageNum;
     }
@@ -1035,7 +1179,7 @@ function updateRouterQuery(newQuery) {
 async function restoreTopicFilter(topicParam) {
   if (!topicParam) return;
   
-  const topicId = parseInt(topicParam as string, 10);
+  const topicId = Number.parseInt(topicParam as string, 10);
   console.log('TranslationPending - Attempting to restore topic filter:', topicId);
   const topic = topicsWithIds.value.find(t => t.id === topicId);
   
@@ -1049,7 +1193,7 @@ async function restoreTopicFilter(topicParam) {
 async function restoreTypeFilter(typeParam) {
   if (!typeParam) return;
   
-  const typeId = parseInt(typeParam as string, 10);
+  const typeId = Number.parseInt(typeParam as string, 10);
   console.log('TranslationPending - Attempting to restore type filter:', typeId);
   const type = questionTypesWithIds.value.find(t => t.id === typeId);
   
@@ -1101,8 +1245,37 @@ async function ensureMinimumLoadingTime(startTime, minLoadingTime) {
 }
 
 async function initializeFromStoredData(storedData) {
-  questionBankData.value = JSON.parse(storedData);
-  const route = useRouter().currentRoute.value;
+  const parsed = JSON.parse(storedData)
+  const routeProgramId = route.query.programId ? Number(route.query.programId) : null
+  const chapterQuery = route.query.chapterId || route.query.nodeId
+  const routeChapterId = chapterQuery ? Number(chapterQuery) : null
+  const routeStageId = route.query.stageId ? Number(route.query.stageId) : null
+  const routeIsExam = route.query.scope === 'exam' && routeProgramId && routeChapterId
+
+  if (routeIsExam) {
+    try {
+      const examContext = await hydrateExamContext(routeProgramId!, routeChapterId!, routeStageId)
+      applyQuestionBankPayload({ ...parsed, ...examContext })
+    } catch (error) {
+      console.error('Error loading exam translation context:', error)
+      applyQuestionBankPayload(parsed)
+    }
+  } else {
+    applyQuestionBankPayload(parsed)
+  }
+
+  localStorage.setItem('questionBank', JSON.stringify(questionBankData.value))
+
+  if (isExamScope.value && !questionBankData.value.mediumId) {
+    isInitialLoading.value = false
+    toastStore.showToast({
+      title: 'Translation medium required',
+      message: 'Select a translation medium from Question Bank before opening Translation Pending.',
+      type: 'warning',
+    })
+    router.push({ name: 'questionBank', query: examScopeQuery() })
+    return
+  }
   
   console.log('TranslationPending - Initial route query params:', route.query);
 
@@ -1110,22 +1283,23 @@ async function initializeFromStoredData(storedData) {
   if (route.query.returnPage || route.query.returnSort || route.query.returnTopic || route.query.returnType) {
     handleReturnParameters(route);
   } else {
-    await handleNormalInitialization(route);
+    await handleNormalInitialization(route.query);
   }
 }
 
-async function handleNormalInitialization(route) {
+async function handleNormalInitialization(routeQuery) {
   // Handle regular query parameters
-  handleRegularParameters(route);
+  handleRegularParameters(routeQuery);
   
-  // Fetch topics for filters
-  console.log('TranslationPending - Fetching topics');
-  await fetchTopicsForChapter();
-  console.log('TranslationPending - Available topics:', topicsWithIds.value);
+  if (!isExamScope.value) {
+    console.log('TranslationPending - Fetching topics');
+    await fetchTopicsForChapter();
+    console.log('TranslationPending - Available topics:', topicsWithIds.value);
+  }
   
   // Restore filters from URL if present
-  await restoreTopicFilter(route.query.topic);
-  await restoreTypeFilter(route.query.type);
+  await restoreTopicFilter(routeQuery.topic);
+  await restoreTypeFilter(routeQuery.type);
   
   logCurrentFilterState();
   
@@ -1159,7 +1333,25 @@ onMounted(async () => {
     isInitialLoading.value = false;
     
     // Handle success message if present
-    handleSuccessMessage(useRouter().currentRoute.value);
+    handleSuccessMessage(route);
+  } else if (route.query.scope === 'exam' && route.query.programId && (route.query.chapterId || route.query.nodeId)) {
+    try {
+      const examContext = await hydrateExamContext(
+        Number(route.query.programId),
+        Number(route.query.chapterId ?? route.query.nodeId),
+        route.query.stageId ? Number(route.query.stageId) : null,
+      )
+      applyQuestionBankPayload(examContext)
+      localStorage.setItem('questionBank', JSON.stringify(questionBankData.value))
+      await handleNormalInitialization(route.query)
+      await ensureMinimumLoadingTime(startTime, minLoadingTime)
+      isInitialLoading.value = false
+      handleSuccessMessage(route)
+    } catch (error) {
+      console.error('TranslationPending - Failed to load exam context:', error)
+      isInitialLoading.value = false
+      router.push({ name: 'questionBank', query: { scope: 'exam' } })
+    }
   } else {
     console.log('TranslationPending - No stored data found, redirecting to questionBank');
     isInitialLoading.value = false;

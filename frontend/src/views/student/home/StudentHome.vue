@@ -105,7 +105,7 @@ const scrollToAbout = () => {
 <style scoped>
 .foundation-home {
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  min-height: calc(100vh - 76px);
+  min-height: calc(100vh - var(--topbar-height, 56px));
 }
 
 .hero-section {

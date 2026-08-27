@@ -4,10 +4,14 @@
     <div class="row p-2 g-2 mb-1">
       <div class="row justify-content-center align-items-center g-2 mb-4">
         <div class="col-12 col-sm-5">
-          <h5 class="text-start m-0 fw-bolder text-uppercase">BOARD MANAGEMENT</h5>
+          <h5 class="text-start m-0 fw-bolder text-uppercase">School Board Management</h5>
         </div>
         <div class="col-12 col-sm-5 dynamic-style text-end">
-          <button class="btn btn-success" id="addButton" @click="router.push('/admin/board/add')">
+          <button
+            class="btn btn-success"
+            id="addButton"
+            @click="router.push('/admin/board/add')"
+          >
             Add Board
           </button>
         </div>
@@ -604,10 +608,10 @@ const fetchBoards = async () => {
 
 // Helper function to set the loading state based on search query
 const setLoadingState = () => {
-  if (!searchQuery.value) {
-    isLoading.value = true;
-  } else {
+  if (searchQuery.value) {
     isSearching.value = true;
+  } else {
+    isLoading.value = true;
   }
 }
 
@@ -949,8 +953,8 @@ onMounted(() => {
   }
 
   if (route.query.page) {
-    const pageNum = parseInt(route.query.page as string, 10)
-    if (!isNaN(pageNum) && pageNum > 0) {
+    const pageNum = Number.parseInt(route.query.page as string, 10)
+    if (!Number.isNaN(pageNum) && pageNum > 0) {
       currentPage.value = pageNum
     }
   }
@@ -959,7 +963,6 @@ onMounted(() => {
     sortOption.value = route.query.sort as string
   }
 
-  // Fetch boards
   fetchBoards()
 })
 
@@ -1226,5 +1229,30 @@ const navigateToEdit = () => {
 /* Ensure search icons stay visible */
 .search-icon, .clear-search-icon, .search-loading-icon {
   z-index: 101; /* Higher than the input focus z-index */
+}
+
+.category-tabs {
+  border-bottom: 2px solid #dee2e6;
+}
+
+.category-tabs .nav-link {
+  color: #495057;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  background: transparent;
+}
+
+.category-tabs .nav-link:hover {
+  color: #212529;
+  border-bottom-color: #adb5bd;
+}
+
+.category-tabs .nav-link.active {
+  color: #212529;
+  font-weight: 600;
+  border-bottom-color: #212529;
+  background: transparent;
 }
 </style>

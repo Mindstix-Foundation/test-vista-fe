@@ -4,9 +4,9 @@
     <div class="container">
       <!-- Loading Indicator -->
       <div v-if="isLoading" class="text-center my-5">
-        <div class="spinner-border" role="status">
+        <output class="spinner-border">
           <span class="visually-hidden">Loading...</span>
-        </div>
+        </output>
         <p class="mt-3">Loading test paper details...</p>
       </div>
 
@@ -556,7 +556,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import { useToastStore } from '@/stores/toast'
@@ -651,13 +651,13 @@ const showLayoutOptions = (sectionIndex: number, questionIndex: number, event: E
       
       // Make sure it doesn't go off-screen on the right
       const rightEdge = layoutSelector.getBoundingClientRect().right;
-      const windowWidth = window.innerWidth;
+      const windowWidth = globalThis.innerWidth;
       if (rightEdge > windowWidth - 10) {
         layoutSelector.style.left = `${windowWidth - layoutSelector.offsetWidth - 10}px`;
       }
       
       // Make sure it doesn't go off-screen on the left
-      if (parseFloat(layoutSelector.style.left) < 10) {
+      if (Number.parseFloat(layoutSelector.style.left) < 10) {
         layoutSelector.style.left = '10px';
       }
     }
@@ -1133,9 +1133,9 @@ const prepareRequestData = (storedData?: ApiResponse): ApiResponse => {
 // Create mock data as fallback
 const createMockData = () => {
   return {
-    patternId: parseInt(patternId.value),
+    patternId: Number.parseInt(patternId.value),
     patternName: patternName.value,
-    totalMarks: parseInt(totalMarks.value),
+    totalMarks: Number.parseInt(totalMarks.value),
     absoluteMarks: 59,
     sectionAllocations: [
       {
@@ -1360,9 +1360,9 @@ const processSubsections = (
   let questionNumberCounter = 1;
   
   // Process each subsection within a section
-  section.subsectionAllocations.forEach(subsection => {
+  for (const subsection of section.subsectionAllocations) {
     // Process each chapter's questions within a subsection
-    subsection.allocatedChapters.forEach(chapter => {
+    for (const chapter of subsection.allocatedChapters) {
       if (chapter.question) {
         const displayQuestion = processQuestion(chapter, questionNumberCounter, section);
         
@@ -1371,8 +1371,8 @@ const processSubsections = (
           questionNumberCounter++;
         }
       }
-    });
-  });
+    }
+  }
 };
 
 // Process a question and return the display question object
@@ -1465,7 +1465,7 @@ const createBaseDisplayQuestion = (
 const addOptionsToQuestion = (displayQuestion: DisplayQuestion, questionText: QuestionText) => {
   if (questionText.mcq_options && questionText.mcq_options.length > 0) {
     displayQuestion.options = questionText.mcq_options.map((option, index) => ({
-      label: String.fromCharCode(65 + index), // A, B, C, D...
+      label: String.fromCodePoint(65 + index), // A, B, C, D...
       text: option.option_text,
       isCorrect: option.is_correct
     }));
@@ -1517,7 +1517,7 @@ const changeQuestion = async (sectionIndex: number, questionIndex: number) => {
 const updateButtonToLoadingState = (sectionIndex: number, questionIndex: number) => {
   const button = document.querySelector(`#question-${sectionIndex}-${questionIndex} .shuffle-button`) as HTMLButtonElement;
   if (button) {
-    button.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading...`;
+    button.innerHTML = `<output class="spinner-border spinner-border-sm me-2" aria-hidden="true"></output>Loading...`;
     button.disabled = true;
   }
 };
@@ -2429,16 +2429,16 @@ const applyGlobalLayout = (layout: string) => {
   
   // Apply this layout to all MCQ questions
   let mcqCount = 0;
-  testPaperSections.value.forEach((section, sectionIndex) => {
-    section.questions.forEach((question, questionIndex) => {
+  for (const [sectionIndex, section] of testPaperSections.value.entries()) {
+    for (const [questionIndex, question] of section.questions.entries()) {
       // Only apply to questions that have options (MCQs)
       if (question.options && question.options.length > 0) {
         const key = `${sectionIndex}-${questionIndex}`;
         optionsLayouts.value[key] = layout;
         mcqCount++;
       }
-    });
-  });
+    }
+  }
   
   // Save the updated layouts to localStorage
   saveOptionLayoutsToLocalStorage()
@@ -2557,8 +2557,8 @@ const toggleMediumDropdown = (event: MouseEvent) => {
         
         // Ensure it doesn't go off-screen on the right
         const rightEdge = adjustedLeft + dropdownWidth;
-        if (rightEdge > window.innerWidth - 10) {
-          mediumDropdownMobileRef.value.style.left = `${window.innerWidth - dropdownWidth - 10}px`;
+        if (rightEdge > globalThis.innerWidth - 10) {
+          mediumDropdownMobileRef.value.style.left = `${globalThis.innerWidth - dropdownWidth - 10}px`;
         } else {
           mediumDropdownMobileRef.value.style.left = `${adjustedLeft}px`;
         }
@@ -2732,9 +2732,9 @@ const prepareQueryParams = (questionTextId: number, chapterId: number, mediumId:
   
   queryParams.append('questionTextIds', questionTextId.toString());
   
-  mediumIds.forEach(id => {
+  for (const id of mediumIds) {
     queryParams.append('mediumIds', id.toString());
-  });
+  }
   
   queryParams.append('chapterId', chapterId.toString());
   queryParams.append('questionOrigin', 'both');
@@ -2807,7 +2807,7 @@ const updateQuestionOptions = (question: DisplayQuestion, questionText: Question
   }
   
   question.options = questionText.mcq_options.map((option, index) => ({
-    label: String.fromCharCode(65 + index), // A, B, C, D...
+    label: String.fromCodePoint(65 + index), // A, B, C, D...
     text: option.option_text,
     isCorrect: option.is_correct
   }));

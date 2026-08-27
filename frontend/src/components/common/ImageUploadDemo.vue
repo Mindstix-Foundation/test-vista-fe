@@ -7,8 +7,9 @@
       <div class="demo-controls mb-4">
         <div class="row">
           <div class="col-md-6">
-            <label class="form-label">Question Text:</label>
+            <label class="form-label" for="demoQuestionText">Question Text:</label>
             <textarea 
+              id="demoQuestionText"
               v-model="questionText" 
               class="form-control" 
               rows="3"
@@ -16,8 +17,9 @@
             ></textarea>
           </div>
           <div class="col-md-3">
-            <label class="form-label">Question Number:</label>
+            <label class="form-label" for="demoQuestionNumber">Question Number:</label>
             <input 
+              id="demoQuestionNumber"
               v-model.number="questionNumber" 
               type="number" 
               class="form-control" 
@@ -25,8 +27,8 @@
             />
           </div>
           <div class="col-md-3">
-            <label class="form-label">Image Type:</label>
-            <select v-model="imageType" class="form-select">
+            <label class="form-label" for="demoImageType">Image Type:</label>
+            <select id="demoImageType" v-model="imageType" class="form-select">
               <option value="question">Question Image</option>
               <option value="option">Option Image</option>
             </select>
@@ -55,7 +57,7 @@
       <div v-if="uploadedImage" class="uploaded-image-section">
         <h4>Uploaded Image:</h4>
         <div class="image-result">
-          <img :src="uploadedImage.url" :alt="'Uploaded image'" class="uploaded-image" />
+          <img :src="uploadedImage.url" alt="Uploaded preview" class="uploaded-image" />
           <div class="image-details">
             <p><strong>Dimensions:</strong> {{ uploadedImage.metadata.width }} × {{ uploadedImage.metadata.height }}px</p>
             <p><strong>File Size:</strong> {{ formatFileSize(uploadedImage.metadata.size) }}</p>
@@ -202,7 +204,7 @@ const formatFileSize = (bytes: number): string => {
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 </script>
 

@@ -4,10 +4,45 @@
     <div class="row p-2 g-2 mb-1 mt-2">
       <div class="row g-2 justify-content-center align-items-center mb-4">
         <div class="col-12 col-sm-10">
-          <h5 class="text-left fw-bolder text-uppercase m-0">Create Test Paper</h5>
+          <h5 class="text-left fw-bolder text-uppercase m-0">Create Test Paper (PDF / Offline)</h5>
         </div>
       </div>
       <hr />
+    </div>
+
+    <div class="row justify-content-center mb-3">
+      <div class="col-12 col-sm-10 col-md-8">
+        <div class="alert alert-info mb-0 small">
+          For <strong>UPSC / competitive mocks</strong>, use
+          <router-link :to="{ name: 'createMockTest' }">
+            Assign Online Test → Competitive → Create Mock
+          </router-link>
+          instead of this board PDF flow.
+        </div>
+      </div>
+    </div>
+
+    <div class="row justify-content-center mb-3">
+      <div class="col-12 col-sm-10 col-md-8">
+        <ol class="wizard-steps list-unstyled d-flex flex-wrap gap-2 mb-0 small">
+          <li :class="{ active: wizardStep >= 1, done: wizardStep > 1 }">1. Medium</li>
+          <li :class="{ active: wizardStep >= 2, done: wizardStep > 2 }">2. Standard</li>
+          <li :class="{ active: wizardStep >= 3, done: wizardStep > 3 }">3. Subject</li>
+          <li :class="{ active: wizardStep >= 4, done: wizardStep > 4 }">4. Chapters</li>
+          <li :class="{ active: wizardStep >= 5 }">5. Pattern</li>
+        </ol>
+      </div>
+    </div>
+
+    <div v-if="!useCurriculumScope && !standards.length" class="row justify-content-center mb-3">
+      <div class="col-12 col-sm-10 col-md-8">
+        <div class="alert alert-warning mb-0">
+          Teaching scope is empty — org standards do not auto-apply.
+          Set board, standards, and subjects in
+          <router-link to="/teacher/profile">Profile</router-link>
+          before creating an offline paper.
+        </div>
+      </div>
     </div>
 
     <!-- Main Content -->
@@ -121,6 +156,7 @@
                     >
                     <label class="form-check-label" for="selectAllChapters">
                       {{ selectAllChapters ? 'Deselect All' : 'Select All' }}
+                      <span class="text-muted">(with questions)</span>
                     </label>
                   </div>
                 </div>
@@ -132,17 +168,26 @@
                     :key="chapter.id" 
                     class="col-12"
                   >
-                    <div class="form-check">
+                    <div class="form-check d-flex align-items-center gap-2">
                       <input 
                         class="form-check-input" 
                         type="checkbox" 
                         :id="`chapter-${chapter.id}`" 
                         v-model="chapter.selected" 
+                        :disabled="(chapter.question_count ?? 0) === 0"
                         @change="updateSelectedChapters"
                       >
-                      <label class="form-check-label" :for="`chapter-${chapter.id}`">
+                      <label class="form-check-label flex-grow-1" :for="`chapter-${chapter.id}`"
+                        :class="{ 'text-muted': (chapter.question_count ?? 0) === 0 }"
+                      >
                         {{ chapter.sequential_chapter_number }}. {{ chapter.name }}
                       </label>
+                      <span
+                        class="badge"
+                        :class="(chapter.question_count ?? 0) > 0 ? 'bg-secondary' : 'bg-light text-muted border'"
+                      >
+                        {{ chapter.question_count ?? 0 }} Q
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -154,7 +199,7 @@
           <!-- Question Origin Selection -->
           <div class="col-12 col-sm-10 col-md-8" v-if="chapters.length > 0">
             <div class="mb-4">
-              <label class="form-label fw-bold mb-3">Question Source <span class="text-danger">*</span></label>
+              <div class="form-label fw-bold mb-3">Question Source <span class="text-danger">*</span></div>
               
               <div class="d-flex flex-column gap-2">
                 <div class="form-check">
@@ -232,7 +277,7 @@
               id="viewSyllabusBtn"
               :disabled="!isFormValid || isLoading || !totalMarks || selectedChapters.length === 0"
             >
-              <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <output v-if="isLoading" class="spinner-border spinner-border-sm me-2"></output>
               Select Pattern
             </button>
           </div>
@@ -258,6 +303,14 @@ import axiosInstance from '@/config/axios'
 import ToastNotification from '@/components/common/ToastNotification.vue'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
 import { VALIDATION_MESSAGES } from '@/utils/validationConstants'
+import type {
+  InstructionMediumItem,
+  StandardItem,
+  SubjectItem,
+  MarksItem,
+  CreateTestUserProfile as UserProfile,
+  ChapterItem,
+} from '@/types/createTestPaperForm'
 
 // Define component name (for linter)
 defineOptions({
@@ -271,116 +324,24 @@ const router = useRouter()
 // Question source selection
 const questionSource = ref('both') // Default selection
 
-// Define interfaces for our data types
-interface SchoolInstructionMedium {
-  id: number;
-  instruction_medium_id: number;
-  school_id: number;
-  created_at: string;
-  updated_at: string;
-  instruction_medium: {
-    id: number;
-    board_id: number;
-    instruction_medium: string;
-    created_at: string;
-    updated_at: string;
-  };
-}
-
-// Interface for simplified instruction medium that will be used in the dropdown
-interface InstructionMediumItem {
-  id: number;
-  name: string;
-  original: SchoolInstructionMedium;
-  selected: boolean;
-}
-
-interface StandardItem {
-  id: number;
-  board_id: number;
-  name: string;
-  sequence_number: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface SubjectItem {
-  subject_id: number;
-  subject_name: string;
-}
-
-// New interface for marks
-interface MarksItem {
-  id: number;
-  name: string;
-}
-
-interface UserProfile {
-  id: number;
-  name: string;
-  email_id: string;
-  schools: {
-    id: number;
-    name: string;
-    board?: {
-      id: number;
-      name: string;
-      abbreviation: string;
-    };
-  }[];
-  teaching_subjects: {
-    id: number;
-    standard: {
-      id: number;
-      name: string;
-      sequence_number: number;
-    };
-    subject: {
-      id: number;
-      name: string;
-    };
-  }[];
-}
-
-// Interface for Chapter with additional UI properties
-interface ChapterItem {
-  id: number;
-  subject_id: number;
-  standard_id: number;
-  sequential_chapter_number: number;
-  name: string;
-  created_at: string;
-  updated_at: string;
-  subject: {
-    id: number;
-    board_id: number;
-    name: string;
-    created_at: string;
-    updated_at: string;
-  };
-  standard: {
-    id: number;
-    board_id: number;
-    name: string;
-    sequence_number: number;
-    created_at: string;
-    updated_at: string;
-  };
-  topics: Array<{
-    id: number;
-    chapter_id: number;
-    sequential_topic_number: number;
-    name: string;
-    created_at: string;
-    updated_at: string;
-  }>;
-  // UI properties
-  selected: boolean;
-}
 
 // User data
 const userProfile = ref<UserProfile | null>(null)
 const schoolId = computed(() => userProfile.value?.schools?.[0]?.id ?? 0)
+const curriculumBoardId = computed(
+  () => userProfile.value?.curriculum_scope?.board?.id ?? userProfile.value?.schools?.[0]?.board?.id ?? 0,
+)
+const useCurriculumScope = computed(() => !!userProfile.value?.curriculum_scope?.board?.id)
+
+const wizardStep = computed(() => {
+  if (!selectedMediums.value.length) return 1
+  if (!selectedStandardObj.value) return 2
+  if (!selectedSubjectObj.value) return 3
+  if (!selectedChapters.value.length || !totalMarks.value) return 4
+  return 5
+})
+
+const LAST_PREFS_KEY = 'createTestPaperLastPrefs'
 
 // Options for dropdowns
 const instructionMediums = ref<InstructionMediumItem[]>([])
@@ -434,22 +395,23 @@ const toastTitle = ref('')
 const toastMessage = ref('')
 const toastType = ref<'success' | 'error' | 'info' | 'warning'>('info')
 
-// Fetch user profile to get school ID
+const unwrapProfile = (data: any): UserProfile | null => {
+  if (!data) return null
+  if (data.curriculum_scope !== undefined || data.schools || data.email_id) return data
+  if (data.data) return unwrapProfile(data.data)
+  return null
+}
+
+// Fetch user profile to get school ID / curriculum scope
 const fetchUserProfile = async () => {
   try {
     isLoading.value = true
-    console.log('Fetching user profile...')
     const response = await axiosInstance.get('/auth/profile')
-    console.log('User profile response:', response.data)
-    
-    if (response.data?.data) {
-      userProfile.value = response.data.data
-      console.log('User profile set:', userProfile.value)
-      console.log('School ID:', schoolId.value)
-      // After getting user profile, fetch instruction mediums for the school
+    const profile = unwrapProfile(response.data)
+    if (profile) {
+      userProfile.value = profile
       await fetchInstructionMediums()
     } else {
-      console.error('Unexpected API response format for user profile:', response.data)
       showErrorToast('Failed to load user profile data')
     }
   } catch (error) {
@@ -460,33 +422,51 @@ const fetchUserProfile = async () => {
   }
 }
 
-// Update the fetchInstructionMediums function
+// Load mediums by board (curriculum scope) or by school
 const fetchInstructionMediums = async () => {
-  if (!schoolId.value) {
-    console.log('No school ID available:', schoolId.value)
-    showErrorToast('No school assigned to your profile')
-    return
-  }
-  
   try {
     isLoading.value = true
-    console.log('Fetching instruction mediums for school:', schoolId.value)
-    const response = await axiosInstance.get(`/school-instruction-mediums/school/${schoolId.value}`)
-    console.log('API Response:', response.data)
-    
-    if (Array.isArray(response.data)) {
-      // Transform the data and add selected property
-      instructionMediums.value = response.data.map((item: SchoolInstructionMedium) => ({
-        id: item.instruction_medium.id,
-        name: item.instruction_medium.instruction_medium,
+    if (curriculumBoardId.value) {
+      const response = await axiosInstance.get(
+        `/instruction-mediums/board/${curriculumBoardId.value}`,
+      )
+      const list = Array.isArray(response.data) ? response.data : response.data?.data || []
+      instructionMediums.value = list.map((item: any) => ({
+        id: item.id,
+        name: item.instruction_medium || item.name,
         original: item,
-        selected: false
+        selected: false,
       }))
-      console.log('Transformed instruction mediums:', instructionMediums.value)
-    } else {
-      console.error('Unexpected API response format:', response.data)
-      showErrorToast('Invalid data format received from server')
+      // Default to a single medium so Total Marks can populate (multi-medium needs questions in ALL)
+      if (instructionMediums.value.length) {
+        const english = instructionMediums.value.find((m) =>
+          /english/i.test(m.name),
+        )
+        const pick = english || instructionMediums.value[0]
+        pick.selected = true
+        selectAllMediums.value = instructionMediums.value.length === 1
+        selectedMediums.value = [pick]
+        await handleMediumChange()
+      }
+      return
     }
+
+    if (schoolId.value) {
+      const response = await axiosInstance.get(`/school-instruction-mediums/school/${schoolId.value}`)
+      if (Array.isArray(response.data)) {
+        instructionMediums.value = response.data.map((item: SchoolInstructionMedium) => ({
+          id: item.instruction_medium.id,
+          name: item.instruction_medium.instruction_medium,
+          original: item,
+          selected: false,
+        }))
+      }
+      return
+    }
+
+    showErrorToast(
+      'No teaching scope found. Set board, standards, and subjects in your Profile, or join an organization.',
+    )
   } catch (error) {
     console.error('Error loading instruction mediums:', error)
     showErrorToast('Failed to load instruction mediums. Please refresh the page and try again.')
@@ -504,11 +484,20 @@ const handleStandardChange = async () => {
   
   try {
     isLoading.value = true
+
+    if (useCurriculumScope.value) {
+      const std = userProfile.value?.curriculum_scope?.standards.find(
+        (s) => s.id === selectedStandardObj.value!.id,
+      )
+      subjects.value = (std?.subjects || []).map((item) => ({
+        subject_id: item.id,
+        subject_name: item.name,
+      }))
+      resetDependentFields('standard')
+      return
+    }
     
-    // Get the selected medium IDs
     const mediumIds = selectedMediums.value.map(medium => medium.id)
-    
-    // Use the new endpoint to fetch common subjects across selected mediums for this standard
     const response = await axiosInstance.get('/subjects/common-subjects', {
       params: {
         standard_id: selectedStandardObj.value.id,
@@ -516,13 +505,10 @@ const handleStandardChange = async () => {
       }
     })
     
-    // Transform the data to the format expected by the UI component
     subjects.value = response.data.map(item => ({
       subject_id: item.id,
       subject_name: item.name
     }))
-    
-    console.log('Common subjects:', subjects.value)
     
     resetDependentFields('standard')
   } catch (error) {
@@ -543,22 +529,33 @@ const handleMediumChange = async () => {
   
   try {
     isLoading.value = true
+
+    if (useCurriculumScope.value) {
+      const scopeStandards = userProfile.value?.curriculum_scope?.standards || []
+      standards.value = scopeStandards.map((s) => ({
+        id: s.id,
+        board_id: curriculumBoardId.value,
+        name: s.name,
+        sequence_number: s.sequence_number,
+        created_at: '',
+        updated_at: '',
+      }))
+      if (selectedStandardObj.value) {
+        await handleStandardChange()
+      }
+      resetDependentFields('medium')
+      return
+    }
     
-    // Get the selected medium IDs
     const mediumIds = selectedMediums.value.map(medium => medium.id)
-    
-    // Use the new endpoint to fetch common standards across selected mediums
     const response = await axiosInstance.get('/standards/common-standards', {
       params: {
         instruction_medium_ids: mediumIds
       }
     })
     
-    // Set the standards from the API response
     standards.value = response.data
-    console.log('Common standards:', standards.value)
     
-    // If a standard is already selected, update subjects
     if (selectedStandardObj.value) {
       await handleStandardChange()
     }
@@ -584,20 +581,34 @@ const handleSubjectChange = async () => {
     isLoading.value = true
     
     // Fetch chapters for the selected subject, standard, and medium
+    // Chapters API accepts a single mediumId; use the first selected medium
+    const primaryMediumId = selectedMediums.value[0]?.id
+    if (!primaryMediumId) {
+      chapters.value = []
+      return
+    }
+
     const response = await axiosInstance.get('/chapters', {
       params: {
         subjectId: selectedSubjectObj.value.subject_id,
         standardId: selectedStandardObj.value?.id,
-        mediumId: selectedInstructionMedium.value
-      }
+        mediumId: primaryMediumId,
+      },
     })
     
     // Transform the chapters data with UI properties
     chapters.value = response.data.map((chapter: ChapterItem) => ({
       ...chapter,
       selected: false,
-      marks: 0
+      marks: 0,
+      question_count: Number((chapter as any).question_count ?? 0),
     }))
+
+    if (!chapters.value.length) {
+      showErrorToast(
+        'No chapters found for this medium / standard / subject. Try another combination or pick a board with seeded content (e.g. Demo MSBSHSE).',
+      )
+    }
     
     // Reset the "select all" checkbox
     selectAllChapters.value = false
@@ -698,9 +709,16 @@ const saveFormState = () => {
         selected: c.selected
       })),
       selectedMarksObj: selectedMarksObj.value,
-      timestamp: new Date().getTime()
+      timestamp: Date.now()
     }
     localStorage.setItem('testPaperDashboardState', JSON.stringify(formState))
+    localStorage.setItem(
+      LAST_PREFS_KEY,
+      JSON.stringify({
+        mediumIds: selectedMediums.value.map((m) => m.id),
+        standardId: selectedStandardObj.value?.id ?? null,
+      }),
+    )
   } catch (error) {
     console.error('Error saving form state:', error)
   }
@@ -746,9 +764,9 @@ const restoreMediumsSelection = (formState) => {
   
   selectedMediums.value = formState.selectedMediums
   // Update the selected state in instructionMediums
-  instructionMediums.value.forEach(medium => {
+  for (const medium of instructionMediums.value) {
     medium.selected = selectedMediums.value.some(m => m.id === medium.id)
-  })
+  }
   // Update selectAll state
   selectAllMediums.value = instructionMediums.value.length > 0 && 
     instructionMediums.value.every(m => m.selected)
@@ -757,12 +775,12 @@ const restoreMediumsSelection = (formState) => {
 const restoreChaptersSelection = (formState) => {
   if (!formState.chapters || chapters.value.length === 0) return
   
-  formState.chapters.forEach((savedChapter: {id: number, selected: boolean}) => {
+  for (const savedChapter of formState.chapters) {
     const matchingChapter = chapters.value.find(c => c.id === savedChapter.id)
     if (matchingChapter) {
       matchingChapter.selected = savedChapter.selected
     }
-  })
+  }
   
   // Update selectAll checkbox state based on individual selections
   selectAllChapters.value = chapters.value.length > 0 && chapters.value.every(c => c.selected)
@@ -783,7 +801,7 @@ const restoreMarksSelection = async (formState) => {
   ) ?? null
   
   if (selectedMarksObj.value) {
-    totalMarks.value = parseInt(selectedMarksObj.value.name, 10)
+    totalMarks.value = Number.parseInt(selectedMarksObj.value.name, 10)
   }
 }
 
@@ -796,6 +814,9 @@ const restoreFormState = async () => {
     
     // Restore selected values in separate functions
     restoreMediumsSelection(formState)
+    if (selectedMediums.value.length) {
+      await handleMediumChange()
+    }
     
     if (formState.selectedStandardObj) {
       selectedStandardObj.value = formState.selectedStandardObj
@@ -820,11 +841,32 @@ const restoreFormState = async () => {
   }
 }
 
+async function restoreLastCreatePaperPrefs() {
+  if (localStorage.getItem('testPaperDashboardState')) return
+  try {
+    const raw = localStorage.getItem(LAST_PREFS_KEY)
+    if (!raw) return
+    const prefs = JSON.parse(raw) as { mediumIds?: number[]; standardId?: number | null }
+    if (!prefs.mediumIds?.length) return
+    for (const m of instructionMediums.value) {
+      m.selected = prefs.mediumIds!.includes(m.id)
+    }
+    updateSelectedMediums()
+    await handleMediumChange()
+    if (!prefs.standardId) return
+    const std = standards.value.find((s) => s.id === prefs.standardId) || null
+    if (!std) return
+    selectedStandardObj.value = std
+    await handleStandardChange()
+  } catch (e) {
+    console.warn('Could not restore last create-paper prefs', e)
+  }
+}
+
 // Load initial data
 onMounted(async () => {
   await fetchUserProfile()
-  
-  // Restore form state after initial data is loaded
+  await restoreLastCreatePaperPrefs()
   await restoreFormState()
 })
 
@@ -874,7 +916,7 @@ const fetchAvailableMarks = async () => {
     })
     
     // Transform marks for the dropdown
-    if (response.data?.marks) {
+    if (response.data?.marks?.length) {
       availableMarks.value = response.data.marks.map((mark: number) => ({
         id: mark,
         name: mark.toString()
@@ -887,7 +929,19 @@ const fetchAvailableMarks = async () => {
       totalMarks.value = null
     } else {
       availableMarks.value = []
-      showErrorToast('No available marks found for the selected criteria')
+      selectedMarksObj.value = null
+      totalMarks.value = null
+      const mediumNames = selectedMediums.value.map((m) => m.name).join(' + ')
+      if (selectedMediums.value.length > 1) {
+        showErrorToast(
+          `No common patterns for ${mediumNames}. Deselect extra mediums (try English only) to load Total Marks.`,
+        )
+      } else {
+        showErrorToast(
+          response.data?.message ||
+            'No available marks found for the selected chapters / medium / question source.',
+        )
+      }
     }
   } catch (error) {
     console.error('Error loading available marks:', error)
@@ -900,14 +954,15 @@ const fetchAvailableMarks = async () => {
 
 // Update the updateSelectedChapters function to fetch marks
 const updateSelectedChapters = () => {
-  // Update selectAll checkbox state based on individual selections
-  selectAllChapters.value = chapters.value.length > 0 && chapters.value.every(c => c.selected)
-  
+  const selectable = chapters.value.filter((c) => (c.question_count ?? 0) > 0)
+  selectAllChapters.value =
+    selectable.length > 0 && selectable.every((c) => c.selected)
+
   // If no chapters are selected, return
   if (selectedChapters.value.length === 0) {
     return
   }
-  
+
   // Fetch available marks when chapter selection changes
   fetchAvailableMarks()
 }
@@ -922,7 +977,7 @@ watch(() => selectedMediums.value, () => {
 // New handler for marks dropdown change
 const handleMarksChange = () => {
   if (selectedMarksObj.value) {
-    totalMarks.value = parseInt(selectedMarksObj.value.name, 10)
+    totalMarks.value = Number.parseInt(selectedMarksObj.value.name, 10)
   } else {
     totalMarks.value = null
   }
@@ -962,17 +1017,21 @@ onBeforeUnmount(() => {
 
 // Add new functions for handling medium selection
 const toggleAllMediums = () => {
-  instructionMediums.value.forEach(medium => {
+  for (const medium of instructionMediums.value) {
     medium.selected = selectAllMediums.value
-  })
+  }
   updateSelectedMediums()
 }
 
 // Add the missing toggleAllChapters function
 const toggleAllChapters = () => {
-  chapters.value.forEach(chapter => {
+  for (const chapter of chapters.value) {
+    if ((chapter.question_count ?? 0) === 0) {
+      chapter.selected = false
+      continue
+    }
     chapter.selected = selectAllChapters.value
-  })
+  }
   updateSelectedChapters()
 }
 
@@ -1279,5 +1338,21 @@ watch(instructionMediums, (newValue) => {
 .marks-floating-input .form-control:not(:placeholder-shown) ~ label {
   opacity: 0.65;
   transform: scale(0.85) translateY(-0.5rem) translateX(0.15rem);
+}
+
+.wizard-steps li {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: #f1f3f5;
+  color: #6c757d;
+  font-weight: 600;
+}
+.wizard-steps li.active {
+  background: #212529;
+  color: #fff;
+}
+.wizard-steps li.done {
+  background: #dee2e6;
+  color: #212529;
 }
 </style> 

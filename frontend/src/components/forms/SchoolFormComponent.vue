@@ -688,11 +688,11 @@ watch(
       }
 
       // Update validation states
-      Object.keys(validationStates.value).forEach((key) => {
+      for (const key of Object.keys(validationStates.value)) {
         const field = key as keyof SchoolValidationStates
         validationStates.value[field].valid = true
         validationStates.value[field].touched = true
-      })
+      }
 
       // Fetch board details and update board search
       if (form.value.board_id) {
@@ -778,7 +778,7 @@ const handleNormalChanges = (
 
 const handleMediumChanges = (currentMediums: SchoolMediumResponse[], formMediums: number[]) => {
   // Handle deleted mediums
-  currentMediums.forEach((medium) => {
+  for (const medium of currentMediums) {
     const mediumId = medium.instruction_medium_id ?? medium.id
     if (mediumId && !formMediums.includes(mediumId)) {
       // Find the medium name from availableMediums
@@ -791,10 +791,10 @@ const handleMediumChanges = (currentMediums: SchoolMediumResponse[], formMediums
         data: { id: mediumId, name: mediumName },
       })
     }
-  })
+  }
 
   // Handle added mediums
-  formMediums.forEach((mediumId) => {
+  for (const mediumId of formMediums) {
     const exists = currentMediums.some((m) => {
       const existingId = m.instruction_medium_id ?? m.id
       return existingId === mediumId
@@ -811,7 +811,7 @@ const handleMediumChanges = (currentMediums: SchoolMediumResponse[], formMediums
         })
       }
     }
-  })
+  }
 }
 
 const handleStandardChanges = (
@@ -819,7 +819,7 @@ const handleStandardChanges = (
   formStandards: number[],
 ) => {
   // Handle deleted standards
-  currentStandards.forEach((standard) => {
+  for (const standard of currentStandards) {
     const standardId = standard.standard_id ?? standard.id
     if (standardId && !formStandards.includes(standardId)) {
       const standardName = standard.standard?.name ?? standard.name
@@ -830,10 +830,10 @@ const handleStandardChanges = (
         data: { id: standardId, name: standardName },
       })
     }
-  })
+  }
 
   // Handle added standards
-  formStandards.forEach((standardId) => {
+  for (const standardId of formStandards) {
     const exists = currentStandards.some((s) => {
       const existingId = s.standard_id ?? s.id
       return existingId === standardId
@@ -850,7 +850,7 @@ const handleStandardChanges = (
         })
       }
     }
-  })
+  }
 }
 
 const handleBasicInfoChanges = (schoolId: number) => {
@@ -895,7 +895,7 @@ const handleBoardChangeInEdit = (
   }
   
   // When changing boards, all current mediums and standards will be removed
-  currentMediums.forEach(medium => {
+  for (const medium of currentMediums) {
     const mediumId = medium.instruction_medium_id ?? medium.id
     const mediumName = medium.instruction_medium?.name ?? medium.name ?? 'Unknown Medium'
     if (mediumId) {
@@ -906,9 +906,9 @@ const handleBoardChangeInEdit = (
         data: { id: mediumId, name: mediumName },
       })
     }
-  })
+  }
   
-  currentStandards.forEach(standard => {
+  for (const standard of currentStandards) {
     const standardId = standard.standard_id ?? standard.id
     const standardName = standard.standard?.name ?? standard.name ?? 'Unknown Standard'
     if (standardId) {
@@ -919,10 +919,10 @@ const handleBoardChangeInEdit = (
         data: { id: standardId, name: standardName },
       })
     }
-  })
+  }
   
   // Add all new mediums
-  form.value.mediums.forEach(mediumId => {
+  for (const mediumId of form.value.mediums) {
     const medium = availableMediums.value.find(m => m.id === mediumId)
     if (medium) {
       addChange({
@@ -932,10 +932,10 @@ const handleBoardChangeInEdit = (
         data: { id: medium.id, name: medium.name },
       })
     }
-  })
+  }
   
   // Add all new standards
-  form.value.standards.forEach(standardId => {
+  for (const standardId of form.value.standards) {
     const standard = availableStandards.value.find(s => s.id === standardId)
     if (standard) {
       addChange({
@@ -945,7 +945,7 @@ const handleBoardChangeInEdit = (
         data: { id: standard.id, name: standard.name },
       })
     }
-  })
+  }
 }
 
 // Main calculateChanges function
@@ -954,7 +954,7 @@ const calculateChanges = async () => {
 
   if (!props.isEditMode || !props.schoolId) return
 
-  const schoolId = parseInt(props.schoolId)
+  const schoolId = Number.parseInt(props.schoolId, 10)
   const [currentMediums, currentStandards] = await Promise.all([
     fetchSchoolMediums(schoolId),
     fetchSchoolStandards(schoolId),
@@ -990,7 +990,7 @@ const confirmAndSubmit = async () => {
       modal?.hide()
 
       // Remove backdrop manually
-      document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove())
+      for (const backdrop of document.querySelectorAll('.modal-backdrop')) backdrop.remove()
 
       // Remove modal-open class and inline styles from body
       document.body.classList.remove('modal-open')
@@ -1173,9 +1173,9 @@ const onSubmit = async () => {
   console.log('🔍 Form data:', form.value)
 
   // Mark all fields as touched to trigger validation display
-  Object.keys(validationStates.value).forEach((key) => {
+  for (const key of Object.keys(validationStates.value)) {
     validationStates.value[key as keyof typeof validationStates.value].touched = true
-  })
+  }
 
   // Update validation states for mediums and standards
   validationStates.value.mediums.valid = form.value.mediums.length > 0

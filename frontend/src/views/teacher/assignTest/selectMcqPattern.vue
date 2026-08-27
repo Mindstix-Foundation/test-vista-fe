@@ -62,9 +62,9 @@
         </h6>
         
         <div v-if="isLoading" class="text-center py-5">
-          <div class="spinner-border" role="status">
+          <output class="spinner-border">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-2">Loading available patterns...</p>
         </div>
         
@@ -396,7 +396,7 @@ const enter = (el: Element, done: () => void) => {
   // Force browser to recalculate styles before animation starts
   // This forces a reflow and is necessary for the animation
   // Use window getComputedStyle which is a function call with side effects
-  window.getComputedStyle(htmlEl).getPropertyValue('height');
+  globalThis.getComputedStyle(htmlEl).getPropertyValue('height');
   
   // Set target height for smooth animation
   const height = htmlEl.scrollHeight;
@@ -436,7 +436,7 @@ const beforeLeave = (el: Element) => {
   // Force browser to acknowledge the height
   // This forces a reflow and is necessary for the animation
   // Use window getComputedStyle which is a function call with side effects
-  window.getComputedStyle(htmlEl).getPropertyValue('height');
+  globalThis.getComputedStyle(htmlEl).getPropertyValue('height');
 }
 
 const leave = (el: Element, done: () => void) => {
@@ -610,14 +610,14 @@ const fetchPatterns = async () => {
     const chapterIds = chaptersData.map((chapter: ChapterData) => chapter.id)
     
     // Get medium IDs from the query parameter
-    const mediumIds = mediumId.split(',').map(id => Number(id))
+    const mediumIds = mediumId.split(',').map(Number)
     
     // Build query parameters
     const params = {
       mediumIds,
       chapterIds,
       questionOrigin: questionSource,
-      marks: parseInt(totalMarksFromPrevious)
+      marks: Number.parseInt(totalMarksFromPrevious)
     }
     
     console.log('Fetching patterns with params:', params)

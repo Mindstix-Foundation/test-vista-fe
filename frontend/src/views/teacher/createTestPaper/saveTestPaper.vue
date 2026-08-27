@@ -4,9 +4,9 @@
     <div class="container">
       <!-- Loading Indicator -->
       <div v-if="isLoading" class="text-center my-5">
-        <div class="spinner-border" role="status">
+        <output class="spinner-border">
           <span class="visually-hidden">Loading...</span>
-        </div>
+        </output>
         <p class="mt-3">Loading test paper details...</p>
       </div>
 
@@ -19,8 +19,9 @@
           'alert-danger': saveError
         }">
           <div v-if="saveInProgress" class="d-flex align-items-center">
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            <strong>Saving test paper...</strong> Please wait while we process your test paper.
+            <output class="spinner-border spinner-border-sm me-2" aria-hidden="true"></output>
+            <strong>{{ saveStageLabel }}</strong>
+            <span class="ms-1">Please wait while we process your test paper.</span>
           </div>
           <div v-else-if="saveComplete">
             <i class="bi bi-check-circle me-2"></i>
@@ -76,7 +77,7 @@
                     :disabled="saveInProgress"
                   >
                     <span v-if="saveInProgress">
-                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                      <output class="spinner-border spinner-border-sm me-1" aria-hidden="true"></output>
                       Saving...
                     </span>
                     <span v-else>
@@ -130,6 +131,20 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Editable paper name (before save) -->
+        <div class="mb-3 p-3 border rounded bg-light">
+          <label class="form-label fw-semibold mb-1" for="paperTitleInput">Test paper name</label>
+          <input
+            id="paperTitleInput"
+            v-model="paperTitle"
+            type="text"
+            class="form-control"
+            maxlength="200"
+            placeholder="e.g. T1 Math Quick Test Aug5"
+          />
+          <div class="form-text">Shown on the paper and in Assign Online Test lists.</div>
         </div>
 
         <!-- A4 Paper Wrapper -->
@@ -272,7 +287,7 @@
           
           <button class="btn btn-dark flex-grow-1" @click="printPage" :disabled="saveInProgress">
             <span v-if="saveInProgress">
-              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              <output class="spinner-border spinner-border-sm me-1" aria-hidden="true"></output>
               Saving...
             </span>
             <span v-else>
@@ -315,7 +330,6 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { DisplayQuestion, DisplaySection, McqOption, MatchPair, QuestionText } from '@/types/types';
 // Add explicit imports for PDF generation libraries with type annotations
-import html2pdf from 'html2pdf.js';
 import axiosInstance from '@/config/axios';
 // These will be dynamically imported when needed
 // import html2canvas from 'html2canvas';
@@ -566,6 +580,21 @@ const saveRequested = ref(route.query.saveRequested === 'true')
 const saveInProgress = ref(false)
 const saveComplete = ref(false)
 const saveError = ref<string | null>(null)
+const saveStage = ref<'idle' | 'validating' | 'generating' | 'saving' | 'finishing'>('idle')
+const saveStageLabel = computed(() => {
+  switch (saveStage.value) {
+    case 'validating':
+      return 'Validating…'
+    case 'generating':
+      return 'Generating PDFs…'
+    case 'saving':
+      return 'Saving questions…'
+    case 'finishing':
+      return 'Finishing…'
+    default:
+      return 'Saving test paper...'
+  }
+})
 
 // Define interface for medium data
 interface Medium {
@@ -596,7 +625,7 @@ const toggleMediumDropdown = (event: MouseEvent) => {
   if (showMediumDropdown.value) {
     nextTick(() => {
       // Desktop positioning
-      if (window.innerWidth >= 576 && mediumButtonRef.value && mediumDropdownRef.value) {
+      if (globalThis.innerWidth >= 576 && mediumButtonRef.value && mediumDropdownRef.value) {
         const buttonRect = mediumButtonRef.value.getBoundingClientRect();
         mediumDropdownRef.value.style.position = 'fixed';
         mediumDropdownRef.value.style.top = `${buttonRect.bottom + 5}px`;
@@ -604,13 +633,13 @@ const toggleMediumDropdown = (event: MouseEvent) => {
         
         // Make sure it doesn't go off-screen
         const rect = mediumDropdownRef.value.getBoundingClientRect();
-        if (rect.right > window.innerWidth - 10) {
-          mediumDropdownRef.value.style.left = `${window.innerWidth - mediumDropdownRef.value.offsetWidth - 10}px`;
+        if (rect.right > globalThis.innerWidth - 10) {
+          mediumDropdownRef.value.style.left = `${globalThis.innerWidth - mediumDropdownRef.value.offsetWidth - 10}px`;
         }
       }
       
       // Mobile positioning
-      if (window.innerWidth < 576 && mediumDropdownMobileRef.value) {
+      if (globalThis.innerWidth < 576 && mediumDropdownMobileRef.value) {
         mediumDropdownMobileRef.value.style.position = 'fixed';
         mediumDropdownMobileRef.value.style.top = '50%';
         mediumDropdownMobileRef.value.style.left = '50%';
@@ -689,6 +718,42 @@ const switchToMedium = async (mediumId: number): Promise<void> => {
   }
 };
 
+const resolveGeneratedPdfBlob = (
+  blob: Blob,
+  mediumId: number,
+  resolve: (blob: Blob) => void,
+  reject: (reason: Error) => void,
+  label?: string,
+) => {
+  const suffix = label ? ` (${label})` : '';
+  console.log(`PDF for medium ${mediumId} generated successfully${suffix}, blob size:`, blob.size);
+  if (blob.size === 0) {
+    console.error(`Generated PDF has zero size for medium ${mediumId}`);
+    reject(new Error(`Generated PDF has zero size for medium ${mediumId}`));
+    return;
+  }
+  resolve(blob);
+};
+
+const fallbackHtml2PdfToBlob = (
+  html2pdf: any,
+  opt: any,
+  element: HTMLElement,
+  mediumId: number,
+  resolve: (blob: Blob) => void,
+  reject: (reason: Error) => void,
+  label?: string,
+) => {
+  html2pdf().set(opt)
+    .from(element)
+    .outputPdf('blob')
+    .then((blob: Blob) => resolveGeneratedPdfBlob(blob, mediumId, resolve, reject, label))
+    .catch((error: Error) => {
+      console.error(`Error generating PDF for medium ${mediumId}:`, error);
+      reject(error);
+    });
+};
+
 // Function to generate PDF for a specific medium
 const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html2pdf: () => {
     set: (options: {
@@ -720,14 +785,6 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
     // Find and modify elements to match print styling
     const a4PaperCard = element.querySelector('.a4-paper-card') as HTMLElement;
     if (a4PaperCard) {
-      // Save original styles to restore later
-      const originalStyles = {
-        border: a4PaperCard.style.border,
-        boxShadow: a4PaperCard.style.boxShadow,
-        padding: a4PaperCard.style.padding,
-        transform: a4PaperCard.style.transform
-      };
-      
       // Apply print-specific styling
       a4PaperCard.style.border = 'none';
       a4PaperCard.style.boxShadow = 'none';
@@ -739,7 +796,7 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
     const elementsToHide = element.querySelectorAll('.no-print, .view-mode-toggle-container, .zoom-control-container');
     const hiddenElements: Array<{element: HTMLElement, display: string}> = [];
     
-    elementsToHide.forEach((el) => {
+    for (const el of elementsToHide) {
       const htmlEl = el as HTMLElement;
       // Save original display style
       hiddenElements.push({
@@ -748,7 +805,7 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
       });
       // Hide the element
       htmlEl.style.display = 'none';
-    });
+    }
     
     // Generate PDF with the updated content
     const pdfBlob = await new Promise<Blob>((resolve, reject) => {
@@ -792,11 +849,11 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
             
             // Process text nodes to improve quality
             const textElements = clonedDoc.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6, li, td, th');
-            textElements.forEach(el => {
+            for (const el of textElements) {
               // Add data attribute to ensure text is recognized properly
-              el.setAttribute('data-html2canvas-render-text', 'true');
-              el.setAttribute('data-html2canvas-render-node', 'true');
-            });
+              el.dataset.html2canvasRenderText = 'true';
+              el.dataset.html2canvasRenderNode = 'true';
+            }
           }
         },
         jsPDF: { 
@@ -845,9 +902,9 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
           
           // Apply special text handling
           const textElements = contentElement.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6, li, td, th');
-          textElements.forEach(el => {
+          for (const el of textElements) {
             (el as HTMLElement).dataset.textContent = el.textContent || '';
-          });
+          }
 
           // Create the canvas at high resolution for clear rendering
           const canvas = await html2canvas(element, {
@@ -861,7 +918,7 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
 
           // Try a different approach: Use PDF.js text extraction capabilities
           // First add the image as background
-          const imgData = canvas.toDataURL('image/jpeg', 1.0);
+          const imgData = canvas.toDataURL('image/jpeg', 1);
           const pdfWidth = 210; // A4 width in mm
           const pdfHeight = 297; // A4 height in mm
           const imgWidth = pdfWidth;
@@ -875,7 +932,7 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
           doc.setFontSize(12);
           
           // Extract text and position from elements
-          textElements.forEach(el => {
+          for (const el of textElements) {
             try {
               const rect = (el as HTMLElement).getBoundingClientRect();
               const elementText = (el as HTMLElement).dataset.textContent || '';
@@ -893,7 +950,7 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
             } catch (err) {
               console.log('Error processing text element:', err);
             }
-          });
+          }
           
           // Generate PDF with selectable text
           const blob = doc.output('blob');
@@ -907,23 +964,7 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
           resolve(blob);
         } catch (error) {
           console.error('Error in specialized PDF rendering:', error);
-          // Fall back to standard method if special handling fails
-          html2pdf().set(opt)
-            .from(element)
-            .outputPdf('blob')
-            .then((blob: Blob) => {
-              console.log(`PDF for medium ${mediumId} generated successfully, blob size:`, blob.size);
-              if (blob.size === 0) {
-                console.error(`Generated PDF has zero size for medium ${mediumId}`);
-                reject(new Error(`Generated PDF has zero size for medium ${mediumId}`));
-                return;
-              }
-              resolve(blob);
-            })
-            .catch((error: Error) => {
-              console.error(`Error generating PDF for medium ${mediumId}:`, error);
-              reject(error);
-            });
+          fallbackHtml2PdfToBlob(html2pdf, opt, element, mediumId, resolve, reject);
         }
       };
       
@@ -935,43 +976,11 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
           specialPageRendering(html2canvas, jsPDF);
         }).catch(error => {
           console.error('Error importing jsPDF:', error);
-          // Fall back to standard method
-          html2pdf().set(opt)
-            .from(element)
-            .outputPdf('blob')
-            .then((blob: Blob) => {
-              console.log(`PDF for medium ${mediumId} generated successfully (jsPDF fallback), blob size:`, blob.size);
-              if (blob.size === 0) {
-                console.error(`Generated PDF has zero size for medium ${mediumId}`);
-                reject(new Error(`Generated PDF has zero size for medium ${mediumId}`));
-                return;
-              }
-              resolve(blob);
-            })
-            .catch((error: Error) => {
-              console.error(`Error generating PDF for medium ${mediumId}:`, error);
-              reject(error);
-            });
+          fallbackHtml2PdfToBlob(html2pdf, opt, element, mediumId, resolve, reject, 'jsPDF fallback');
         });
       }).catch(error => {
         console.error('Error importing html2canvas:', error);
-        // Fall back to standard method
-        html2pdf().set(opt)
-          .from(element)
-          .outputPdf('blob')
-          .then((blob: Blob) => {
-            console.log(`PDF for medium ${mediumId} generated successfully (html2canvas fallback), blob size:`, blob.size);
-            if (blob.size === 0) {
-              console.error(`Generated PDF has zero size for medium ${mediumId}`);
-              reject(new Error(`Generated PDF has zero size for medium ${mediumId}`));
-              return;
-            }
-            resolve(blob);
-          })
-          .catch((error: Error) => {
-            console.error(`Error generating PDF for medium ${mediumId}:`, error);
-            reject(error);
-          });
+        fallbackHtml2PdfToBlob(html2pdf, opt, element, mediumId, resolve, reject, 'html2canvas fallback');
       });
     });
     
@@ -984,9 +993,9 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
     }
     
     // Restore display for hidden elements
-    hiddenElements.forEach(item => {
+    for (const item of hiddenElements) {
       item.element.style.display = item.display;
-    });
+    }
     
     // Remove print class from body
     document.body.classList.remove('printing-test-paper');
@@ -999,7 +1008,7 @@ const generatePDFForMedium = async (element: HTMLElement, mediumId: number, html
     });
     
     // Create a file from the blob with a consistent naming pattern for the API
-    const sanitizedTitle = paperTitle.value.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    const sanitizedTitle = paperTitle.value.replaceAll(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     const fileName = `test_paper_${sanitizedTitle}_medium_${mediumId}.pdf`;
     
     // Create File object with explicit MIME type
@@ -1035,6 +1044,7 @@ const saveTestPaperToDB = async () => {
   console.log('Starting save process for test paper...');
   saveInProgress.value = true;
   saveError.value = null;
+  saveStage.value = 'validating';
   
   // Store original medium ID to restore later
   const originalMediumId = currentMediumId.value;
@@ -1056,6 +1066,7 @@ const saveTestPaperToDB = async () => {
     const html2pdf = await loadHtml2PdfLibrary();
     console.log('HTML2PDF library loaded successfully');
     
+    saveStage.value = 'generating';
     // Generate PDF files for all mediums
     const pdfFiles = await generatePDFFilesForAllMediums(element, html2pdf);
     
@@ -1073,14 +1084,17 @@ const saveTestPaperToDB = async () => {
       throw new Error(`${invalidFiles.length} PDF files are invalid or empty`);
     }
     
+    saveStage.value = 'saving';
     // Submit data to API
     await submitTestPaperData(userId, schoolId, chapters, weightages, patternId, pdfFiles);
     
+    saveStage.value = 'finishing';
     saveComplete.value = true;
   } catch (error) {
     handleSaveError(error);
   } finally {
     saveInProgress.value = false;
+    saveStage.value = 'idle';
     await restoreOriginalMedium(originalMediumId);
   }
 };
@@ -1249,7 +1263,7 @@ const generatePDFFilesForAllMediums = async (element: HTMLElement, html2pdf: () 
     const testOptions = {
       margin: 0,
       filename: 'test.pdf',
-      image: { type: 'jpeg', quality: 1.0 },
+      image: { type: 'jpeg', quality: 1 },
       html2canvas: { 
         scale: 4, 
         logging: true, 
@@ -1276,11 +1290,11 @@ const generatePDFFilesForAllMediums = async (element: HTMLElement, html2pdf: () 
           
           // Mark all text elements for special handling
           const textElements = clonedDoc.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6, li, td, th');
-          textElements.forEach(el => {
-            el.setAttribute('data-html2canvas-render-text', 'true');
-            el.setAttribute('data-html2canvas-render-node', 'true');
-            el.setAttribute('data-html2canvas-selectable-text', 'true');
-          });
+          for (const el of textElements) {
+            el.dataset.html2canvasRenderText = 'true';
+            el.dataset.html2canvasRenderNode = 'true';
+            el.dataset.html2canvasSelectableText = 'true';
+          }
         }
       },
       jsPDF: { 
@@ -1377,7 +1391,7 @@ const flattenArray = (arr: any[]): any[] => {
   
   const flatten = (item: any) => {
     if (Array.isArray(item)) {
-      item.forEach(flatten);
+      for (const el of item) flatten(el);
     } else {
       result.push(item);
     }
@@ -1396,8 +1410,8 @@ const extractChapterId = (chapter: { id?: number; chapterId?: number } | number 
   
   // Check if chapter is a string that can be converted to number
   if (typeof chapter === 'string') {
-    const parsed = parseInt(chapter, 10);
-    return isNaN(parsed) ? null : parsed;
+    const parsed = Number.parseInt(chapter, 10);
+    return Number.isNaN(parsed) ? null : parsed;
   }
   
   // For object types, check for id or chapterId properties
@@ -1412,10 +1426,72 @@ const extractChapterId = (chapter: { id?: number; chapterId?: number } | number 
 };
 
 // Helper function to safely append values to FormData
-const appendToFormData = (formData: FormData, name: string, value: number | string | null | undefined) => {
-  if (value !== null && value !== undefined) {
-    formData.append(name, value.toString());
+const appendPdfFiles = (formData: FormData, pdfFiles: File[]) => {
+  for (const file of pdfFiles) {
+    if (file && file.size > 0) {
+      console.log(`Adding file to FormData: ${file.name}, size: ${file.size}, type: ${file.type}`);
+      formData.append('files', file);
+    } else {
+      console.error('Skipping invalid file:', file);
+    }
   }
+};
+
+const logFormDataEntries = (formData: FormData) => {
+  console.log('FormData entries:');
+  for (const pair of formData.entries()) {
+    if (pair[1] instanceof File) {
+      console.log(`${pair[0]}: File(${(pair[1] as File).name}, ${(pair[1] as File).size} bytes)`);
+    } else {
+      console.log(`${pair[0]}: ${pair[1]}`);
+    }
+  }
+};
+
+const logTestPaperSubmitError = (
+  error: any,
+  context: {
+    chaptersArray: number[]
+    weightagesArray: number[]
+    mediumIds: number[]
+    pdfFiles: File[]
+    formData: FormData
+    userId: string | number
+    schoolId: string | number
+  },
+) => {
+  const { chaptersArray, weightagesArray, mediumIds, pdfFiles, formData, userId, schoolId } = context
+  console.error('API error:', error);
+  if (error.response) {
+    console.error('Error response details:', {
+      status: error.response.status,
+      statusText: error.response.statusText,
+      data: error.response.data,
+      headers: error.response.headers,
+      config: {
+        url: error.response.config?.url,
+        method: error.response.config?.method,
+        headers: error.response.config?.headers
+      }
+    });
+    if (error.response.status === 400) {
+      console.error('400 Bad Request - Validation failed. Check the following:');
+      console.error('1. Data format:', {
+        chapters: chaptersArray,
+        weightages: weightagesArray,
+        instruction_mediums: mediumIds,
+        filesCount: pdfFiles.length
+      });
+      console.error('2. Query parameters:', { userId, schoolId });
+      console.error('3. Form data keys:', Array.from(formData.keys()));
+    }
+    return;
+  }
+  if (error.request) {
+    console.error('No response received:', error.request);
+    return;
+  }
+  console.error('Error setting up request:', error.message);
 };
 
 // Submit test paper data to the API
@@ -1447,7 +1523,7 @@ const submitTestPaperData = async (
   console.log('Flattened weightages:', flattenedWeightages);
   
   const chapterIds = flattenedChapters.map(extractChapterId).filter(Boolean);
-  const processedWeightages = flattenedWeightages.map(w => typeof w === 'string' ? parseInt(w, 10) : w).filter(w => !isNaN(w));
+  const processedWeightages = flattenedWeightages.map(w => typeof w === 'string' ? Number.parseInt(w, 10) : w).filter(w => !Number.isNaN(w));
   
   console.log('Extracted chapter IDs:', chapterIds);
   console.log('Processed weightages:', processedWeightages);
@@ -1462,15 +1538,15 @@ const submitTestPaperData = async (
   }
   
   // Add chapters as JSON array (API expects array format)
-  const chaptersArray = chapterIds.map(id => Number(id)).filter(id => !isNaN(id));
+  const chaptersArray = chapterIds.map(Number).filter(id => !Number.isNaN(id));
   formData.append('chapters', JSON.stringify(chaptersArray));
   
   // Add weightages as JSON array (API expects array format)  
-  const weightagesArray = processedWeightages.map(w => Number(w)).filter(w => !isNaN(w));
+  const weightagesArray = processedWeightages.map(Number).filter(w => !Number.isNaN(w));
   formData.append('weightages', JSON.stringify(weightagesArray));
   
   // Add instruction mediums as JSON array
-  const mediumIds = availableMediums.value.map(medium => Number(medium.id)).filter(id => !isNaN(id));
+  const mediumIds = availableMediums.value.map(medium => Number(medium.id)).filter(id => !Number.isNaN(id));
   formData.append('instruction_mediums', JSON.stringify(mediumIds));
   
   // Final validation
@@ -1497,26 +1573,8 @@ const submitTestPaperData = async (
   
   // Add files - make sure they're in the same order as instruction_mediums
   console.log('Adding files to form data:', pdfFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
-  pdfFiles.forEach(file => {
-    if (file && file.size > 0) {
-      // Explicitly log each file being added
-      console.log(`Adding file to FormData: ${file.name}, size: ${file.size}, type: ${file.type}`);
-      formData.append('files', file);
-    } else {
-      console.error('Skipping invalid file:', file);
-    }
-  });
-  
-  // Log form data entries
-  console.log('FormData entries:');
-  for (const pair of formData.entries()) {
-    // For files, just log the name and size, not the full binary data
-    if (pair[1] instanceof File) {
-      console.log(`${pair[0]}: File(${(pair[1] as File).name}, ${(pair[1] as File).size} bytes)`);
-    } else {
-      console.log(`${pair[0]}: ${pair[1]}`);
-    }
-  }
+  appendPdfFiles(formData, pdfFiles);
+  logFormDataEntries(formData);
 
   // Log the summary of what we're submitting
   console.log('Submitting test paper with the following data:', {
@@ -1526,7 +1584,6 @@ const submitTestPaperData = async (
   });
   
   try {
-    // Call the API endpoint with userId and schoolId as query parameters
     const url = `/test-paper-html/create?userId=${userId}&schoolId=${schoolId}`;
     console.log('Making API call to:', url);
     console.log('Request headers will include:', {
@@ -1541,38 +1598,7 @@ const submitTestPaperData = async (
     console.log('API response:', response.data);
     return response;
   } catch (error) {
-    console.error('API error:', error);
-    // Log more detailed error information
-    if (error.response) {
-      console.error('Error response details:', {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        headers: error.response.headers,
-        config: {
-          url: error.response.config?.url,
-          method: error.response.config?.method,
-          headers: error.response.config?.headers
-        }
-      });
-      
-      // If it's a validation error, show more specific information
-      if (error.response.status === 400) {
-        console.error('400 Bad Request - Validation failed. Check the following:');
-        console.error('1. Data format:', {
-          chapters: chaptersArray,
-          weightages: weightagesArray,
-          instruction_mediums: mediumIds,
-          filesCount: pdfFiles.length
-        });
-        console.error('2. Query parameters:', { userId, schoolId });
-        console.error('3. Form data keys:', Array.from(formData.keys()));
-      }
-    } else if (error.request) {
-      console.error('No response received:', error.request);
-    } else {
-      console.error('Error setting up request:', error.message);
-    }
+    logTestPaperSubmitError(error, { chaptersArray, weightagesArray, mediumIds, pdfFiles, formData, userId, schoolId });
     throw error;
   }
 };
@@ -1698,7 +1724,7 @@ const extractAvailableMediums = (data: ApiResponse) => {
       console.log('No mediums found in API data, using default English medium');
     }
   } catch (error) {
-    console.error('Error extracting available mediums:', error);
+    console.error('Error extracting available mediums:for (const chapter of ', error);
     // Add default medium as fallback
     availableMediums.value = [{ id: 1, name: 'English' }];
   }
@@ -1781,9 +1807,9 @@ const processSubsections = (
   let questionNumberCounter = 1;
   
   // Process each subsection within a section
-  section.subsectionAllocations.forEach(subsection => {
+  for (const subsection of section.subsectionAllocations) {
     // Process each chapter's questions within a subsection
-    subsection.allocatedChapters.forEach(chapter => {
+    for (const chapter of subsection.allocatedChapters) {
       if (chapter.question) {
         const question = processQuestion(
           chapter,
@@ -1796,8 +1822,8 @@ const processSubsections = (
           questionNumberCounter++;
         }
       }
-    });
-  });
+    }
+  }
 };
 
 // Process a question from chapter data
@@ -1884,7 +1910,7 @@ const createBaseDisplayQuestion = (
 const addOptionsToQuestion = (displayQuestion: DisplayQuestion, questionText: QuestionText) => {
   if (questionText.mcq_options && questionText.mcq_options.length > 0) {
     displayQuestion.options = questionText.mcq_options.map((option: McqOption, index: number) => ({
-      label: String.fromCharCode(65 + index), // A, B, C, D...
+      label: String.fromCodePoint(65 + index), // A, B, C, D...
       text: option.option_text,
       isCorrect: option.is_correct
     }));
@@ -1958,18 +1984,18 @@ const printPage = async () => {
     // Hide elements that should be hidden in print
     const elementsToHide = document.querySelectorAll('.no-print');
     const originalDisplays: string[] = [];
-    elementsToHide.forEach((el, index) => {
+    for (const [index, el] of elementsToHide.entries()) {
       const htmlEl = el as HTMLElement;
       originalDisplays[index] = htmlEl.style.display;
       htmlEl.style.display = 'none';
-    });
+    }
     
-    console.log('Styles applied, calling window.print()...');
+    console.log('Styles applied, calling globalThis.print()...');
     
     // Add a small delay to ensure styles are applied
     setTimeout(() => {
       // Use the browser's native print dialog
-      window.print();
+      globalThis.print();
       console.log('Print dialog opened successfully');
     }, 100);
     
@@ -1990,10 +2016,10 @@ const printPage = async () => {
       }
       
       // Restore original display values
-      elementsToHide.forEach((el, index) => {
+      for (const [index, el] of elementsToHide.entries()) {
         const htmlEl = el as HTMLElement;
         htmlEl.style.display = originalDisplays[index] || '';
-      });
+      }
       
       console.log('Styles restored successfully');
     }, 1000);
@@ -2018,7 +2044,7 @@ const goBack = () => {
 
 // Scroll to top functionality
 const scrollToTop = () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  globalThis.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // Initialize component data
@@ -2075,7 +2101,7 @@ onMounted(() => {
   initializeComponent();
   
   // Add scroll event listener for back-to-top button visibility
-  window.addEventListener('scroll', handleScroll);
+  globalThis.addEventListener('scroll', handleScroll);
   
   // Call handleScroll initially to set the correct visibility
   handleScroll();
@@ -2093,7 +2119,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   // Remove event listeners
-  window.removeEventListener('scroll', handleScroll);
+  globalThis.removeEventListener('scroll', handleScroll);
   document.removeEventListener('click', handleMediumDropdownClickOutside);
 });
 
@@ -2101,7 +2127,7 @@ onBeforeUnmount(() => {
 const handleScroll = () => {
   const backToTopBtn = document.getElementById('backToTop');
   if (backToTopBtn) {
-    if (window.scrollY > 300) {
+    if (globalThis.scrollY > 300) {
       backToTopBtn.style.cssText = 'display: flex !important;';
     } else {
       backToTopBtn.style.cssText = 'display: none !important;';
@@ -2139,7 +2165,7 @@ const updateZoom = () => {
 // Load saved zoom level from localStorage
 const savedZoomLevel = localStorage.getItem('a4ZoomLevel');
 if (savedZoomLevel) {
-  zoomLevel.value = parseInt(savedZoomLevel);
+  zoomLevel.value = Number.parseInt(savedZoomLevel);
 }
 </script>
 

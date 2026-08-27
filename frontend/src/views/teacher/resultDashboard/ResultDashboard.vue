@@ -13,7 +13,7 @@
             class="btn btn-primary"
             :disabled="isGeneratingPDF"
           >
-            <span v-if="isGeneratingPDF" class="spinner-border spinner-border-sm me-2"></span>
+            <output v-if="isGeneratingPDF" class="spinner-border spinner-border-sm me-2"></output>
             <i v-else class="bi bi-download me-2"></i>
             {{ isGeneratingPDF ? 'Generating...' : 'Save PDF' }}
           </button>
@@ -106,6 +106,48 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section-wise Performance (competitive/entrance mocks) -->
+    <div class="row justify-content-center mb-4" v-if="sectionWiseAnalysis.length > 0">
+      <div class="col-md-10">
+        <div class="chapter-analysis-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <i class="bi bi-layout-three-columns"></i> Section-wise Class Performance
+            </h4>
+          </div>
+          <div class="chapter-table-container">
+            <table class="chapter-table">
+              <thead>
+                <tr>
+                  <th scope="col">Section</th>
+                  <th scope="col">Questions</th>
+                  <th scope="col">Attempted</th>
+                  <th scope="col">Avg Score</th>
+                  <th scope="col">Cutoff</th>
+                  <th scope="col">Cleared %</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="section in sectionWiseAnalysis" :key="section.sectionName" class="chapter-row">
+                  <td class="chapter-name-cell"><strong>{{ section.sectionName }}</strong></td>
+                  <td class="number-cell"><span class="stat-number">{{ formatDecimal(section.questions) }}</span></td>
+                  <td class="number-cell"><span class="stat-number">{{ formatDecimal(section.attempted) }}</span></td>
+                  <td class="score-cell">
+                    <span class="percentage">{{ formatDecimal(section.percentage) }}%</span>
+                    <small class="text-muted d-block">{{ formatDecimal(section.obtainedMarks) }}/{{ formatDecimal(section.totalMarks) }}</small>
+                  </td>
+                  <td class="number-cell"><span class="stat-number">{{ section.qualifyingMarks ?? '—' }}</span></td>
+                  <td class="number-cell">
+                    <span class="stat-number">{{ section.qualifiedRate !== null && section.qualifiedRate !== undefined ? formatDecimal(section.qualifiedRate) + '%' : '—' }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -282,9 +324,9 @@
             >
               <i class="bi bi-arrow-clockwise me-1"></i>
               <span>{{ autoRefresh ? 'Live' : 'Refresh' }}</span>
-              <span v-if="autoRefresh" class="spinner-border spinner-border-sm ms-2" role="status">
+              <output v-if="autoRefresh" class="spinner-border spinner-border-sm ms-2">
                 <span class="visually-hidden">Loading...</span>
-              </span>
+              </output>
             </button>
           </div>
         </div>
@@ -296,9 +338,9 @@
       <div class="col-md-10">
         <!-- Loading indicator -->
         <div v-if="isLoading" class="text-center my-5">
-          <div class="spinner-border" role="status">
+          <output class="spinner-border">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-3">Loading student results...</p>
         </div>
 
@@ -371,6 +413,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
+import {
+  getRecommendationType,
+  getRecommendationChapters,
+  getRecommendationMessage,
+  getRecommendationClass,
+} from '@/utils/recommendationParsing'
 
 const route = useRoute()
 // const router = useRouter() // Commented out as it's not used
@@ -426,6 +474,7 @@ interface ApiTestPaperResultsResponse {
   lowest_score: number
   pass_rate: number
   chapter_wise_analysis?: ChapterAnalysis[]
+  section_wise_analysis?: SectionAnalysis[]
   class_strengths?: string[]
   class_weaknesses?: string[]
   class_average_areas?: string[]
@@ -446,6 +495,18 @@ interface ChapterAnalysis {
   studentsCount: number
 }
 
+interface SectionAnalysis {
+  sectionName: string
+  questions: number
+  attempted: number
+  obtainedMarks: number
+  totalMarks: number
+  percentage: number
+  qualifyingMarks: number | null
+  qualifiedRate: number | null
+  studentsCount: number
+}
+
 // Reactive variables
 const isLoading = ref(true)
 const searchQuery = ref('')
@@ -463,6 +524,7 @@ const studentResults = ref<StudentResult[]>([])
 
 // Chapter-wise analysis
 const chapterWiseAnalysis = ref<ChapterAnalysis[]>([])
+const sectionWiseAnalysis = ref<SectionAnalysis[]>([])
 
 // Class analysis from backend
 const classStrengths = ref<string[]>([])
@@ -616,6 +678,7 @@ const fetchTestPaperResults = async () => {
 
     // Set chapter-wise analysis
     chapterWiseAnalysis.value = data.chapter_wise_analysis || []
+    sectionWiseAnalysis.value = data.section_wise_analysis || []
 
     // Set class analysis from backend
     classStrengths.value = data.class_strengths || []
@@ -650,12 +713,10 @@ const toggleAutoRefresh = () => {
         // Optionally disable auto-refresh on repeated failures
       }
     }, 2500)
-  } else {
+  } else if (refreshInterval.value) {
     // Stop auto-refresh
-    if (refreshInterval.value) {
-      clearInterval(refreshInterval.value)
-      refreshInterval.value = null
-    }
+    clearInterval(refreshInterval.value)
+    refreshInterval.value = null
   }
 }
 
@@ -704,7 +765,7 @@ const downloadPDF = () => {
   
   try {
     // Create a new window with the printable content
-    const printWindow = window.open('', '_blank')
+    const printWindow = globalThis.open('', '_blank')
     if (!printWindow) {
       throw new Error('Unable to open print window')
     }
@@ -769,84 +830,6 @@ const formatDecimal = (value: number) => {
   return rounded.toString()
 }
 
-// Methods for parsing recommendations
-const getRecommendationType = (recommendation: string): string => {
-  if (recommendation.includes('🔴 Critical Focus Areas')) return 'Critical Focus Areas'
-  if (recommendation.includes('🟡 Areas for Enhancement')) return 'Areas for Enhancement'
-  if (recommendation.includes('🟢 Strong Performance')) return 'Strong Performance'
-  return 'Recommendation'
-}
-
-const getRecommendationChapters = (recommendation: string): string => {
-  // Add debugging to see the actual format
-  console.log('Processing recommendation:', recommendation)
-  
-  // Try multiple regex patterns to handle different formats
-  
-  // Pattern 1: Standard format ": chapter_name -"
-  let match = recommendation.match(/: ([^-]+) -/)
-  if (match && match[1].trim()) {
-    console.log('Pattern 1 matched:', match[1].trim())
-    return formatChapterNames(match[1].trim())
-  }
-  
-  // Pattern 2: Handle format with emoji prefix ": chapter_name"
-  match = recommendation.match(/: (.+?) - /)
-  if (match && match[1].trim()) {
-    console.log('Pattern 2 matched:', match[1].trim())
-    return formatChapterNames(match[1].trim())
-  }
-  
-  // Pattern 3: Extract everything between ":" and first " -" or end
-  match = recommendation.match(/: (.+?)(?:\s-\s|$)/)
-  if (match && match[1].trim()) {
-    console.log('Pattern 3 matched:', match[1].trim())
-    return formatChapterNames(match[1].trim())
-  }
-  
-  // Pattern 4: Fallback - extract content after type indicator
-  const typeIndicators = ['🔴 Critical Focus Areas', '🟡 Areas for Enhancement', '🟢 Strong Performance']
-  for (const indicator of typeIndicators) {
-    if (recommendation.includes(indicator)) {
-      const afterIndicator = recommendation.split(indicator)[1]
-      if (afterIndicator) {
-        // Extract text after ":" and before " -"
-        const colonMatch = afterIndicator.match(/:\s*(.+?)(?:\s-|$)/)
-        if (colonMatch && colonMatch[1].trim()) {
-          console.log('Pattern 4 matched:', colonMatch[1].trim())
-          return formatChapterNames(colonMatch[1].trim())
-        }
-      }
-    }
-  }
-  
-  console.log('No pattern matched, using fallback')
-  // If all patterns fail, return a fallback message
-  return 'Multiple Chapters'
-}
-
-const formatChapterNames = (chapters: string): string => {
-  if (!chapters || chapters.trim() === '') {
-    return 'Multiple Chapters'
-  }
-  
-  // Simply return all chapter names without truncation
-  return chapters.trim()
-}
-
-const getRecommendationMessage = (recommendation: string): string => {
-  const match = recommendation.match(/ - (.+)$/)
-  const result = match ? match[1].trim() : recommendation
-  return result
-}
-
-const getRecommendationClass = (recommendation: string): string => {
-  if (recommendation.includes('🔴 Critical Focus Areas')) return 'recommendation-critical'
-  if (recommendation.includes('🟡 Areas for Enhancement')) return 'recommendation-enhancement'
-  if (recommendation.includes('🟢 Strong Performance')) return 'recommendation-strong'
-  return 'recommendation-default'
-}
-
 const generatePDFContent = () => {
   if (!testPaperInfo.value) return ''
   
@@ -857,7 +840,7 @@ const generatePDFContent = () => {
   const completedResults = filteredResults.value.filter(result => result.status === 'completed')
   
   let tableRows = ''
-  completedResults.forEach((result, index) => {
+  for (const [index, result] of completedResults.entries()) {
     tableRows += `
       <tr>
         <td>${index + 1}</td>
@@ -869,13 +852,13 @@ const generatePDFContent = () => {
         <td>${result.rank === 0 ? '-' : result.rank}</td>
       </tr>
     `
-  })
+  }
 
   // Generate chapter-wise analysis table (only if data exists)
   let chapterAnalysisSection = ''
   if (sortedChapters.value.length > 0) {
     let chapterAnalysisRows = ''
-    sortedChapters.value.forEach((chapter) => {
+    for (const chapter of sortedChapters.value) {
       chapterAnalysisRows += `
         <tr>
           <td>${chapter.chapterName}</td>
@@ -885,7 +868,7 @@ const generatePDFContent = () => {
           <td>${formatDecimal(chapter.percentage)}%</td>
         </tr>
       `
-    })
+    }
 
     chapterAnalysisSection = `
       <div class="section">
@@ -912,7 +895,7 @@ const generatePDFContent = () => {
   let recommendationsSection = ''
   if (classRecommendations.value.length > 0) {
     let recommendationsHtml = ''
-    classRecommendations.value.slice(0, 3).forEach((recommendation) => {
+    for (const recommendation of classRecommendations.value.slice(0, 3)) {
       const chapters = getRecommendationChapters(recommendation)
       const message = getRecommendationMessage(recommendation)
       
@@ -921,7 +904,7 @@ const generatePDFContent = () => {
           <strong>${chapters}</strong> - ${message}
         </div>
       `
-    })
+    }
 
     recommendationsSection = `
       <div class="section">
@@ -1682,11 +1665,14 @@ input[type="text"]:focus {
   margin-bottom: 30px;
 }
 
+/* Section Header */
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
   padding-bottom: 10px;
   border-bottom: 2px solid #e9ecef;
 }
@@ -1696,12 +1682,15 @@ input[type="text"]:focus {
   font-weight: 600;
   margin: 0;
   padding: 0;
+  border-bottom: none;
 }
 
+/* Sorting Controls - Clean Design */
 .sorting-controls {
   display: flex;
   align-items: center;
   gap: 15px;
+  margin-bottom: 0;
 }
 
 .sort-selector {
@@ -1725,201 +1714,6 @@ input[type="text"]:focus {
   gap: 5px;
   font-size: 0.9rem;
   color: #6c757d;
-}
-
-.sort-options {
-  display: flex;
-  gap: 10px;
-}
-
-.sort-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.sort-option:hover {
-  background-color: #e5e7eb;
-  color: #333;
-}
-
-.sort-option.active {
-  background-color: #007bff;
-  color: white;
-  font-weight: 600;
-}
-
-.option-icon {
-  font-size: 1.1rem;
-}
-
-.option-title {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.chapter-table-container {
-  overflow-x: auto;
-}
-
-.chapter-table {
-  width: 100%;
-  min-width: 800px; /* Ensure table is scrollable on smaller screens */
-  border-collapse: collapse;
-  border-spacing: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  background: white;
-}
-
-.chapter-table th {
-  background-color: #f8f9fa;
-  color: #333;
-  font-weight: 600;
-  text-align: left;
-  padding: 12px 15px;
-  font-size: 0.9rem;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.chapter-table td {
-  padding: 12px 15px;
-  font-size: 0.9rem;
-  color: #555;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.chapter-table tr:last-child td {
-  border-bottom: none;
-}
-
-/* Old grid-based styles removed - now using proper table layout */
-
-.stat-number {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #007bff;
-}
-
-.correct-count, .wrong-count {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #28a745; /* Correct */
-  color: #dc3545; /* Wrong */
-}
-
-.performance-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.badge-excellent {
-  background-color: #d4edda;
-  color: #155724;
-}
-
-.badge-good {
-  background-color: #d1ecf1;
-  color: #0c5460;
-}
-
-.badge-average {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.badge-poor {
-  background-color: #f8d7da;
-  color: #721c24;
-}
-
-.score-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.percentage {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #333;
-}
-
-.progress-bar-small {
-  width: 100%;
-  height: 8px;
-  background-color: #e9ecef;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill-small {
-  height: 100%;
-  transition: width 0.3s ease;
-}
-
-.progress-excellent {
-  background-color: #28a745;
-}
-
-.progress-good {
-  background-color: #17a2b8;
-}
-
-.progress-average {
-  background-color: #ffc107;
-}
-
-.progress-poor {
-  background-color: #dc3545;
-}
-
-/* Section Header */
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #e9ecef;
-}
-
-.section-title {
-  color: #333;
-  font-weight: 600;
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-/* Sorting Controls - Clean Design */
-.sorting-controls {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 0;
-}
-
-.sort-label {
-  display: flex;
-  align-items: center;
-  font-size: 0.9rem;
-  color: #6c757d;
   font-weight: 500;
 }
 
@@ -1931,6 +1725,7 @@ input[type="text"]:focus {
 .sort-option {
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 8px 16px;
   background: #f8f9fa;
   border: 1px solid #e9ecef;
@@ -1946,6 +1741,7 @@ input[type="text"]:focus {
 .sort-option:hover {
   background: #e9ecef;
   border-color: #dee2e6;
+  color: #333;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -1954,6 +1750,7 @@ input[type="text"]:focus {
   background: #007bff;
   border-color: #007bff;
   color: white;
+  font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
 }
 
@@ -1967,6 +1764,16 @@ input[type="text"]:focus {
   font-size: 0.9rem;
 }
 
+.option-icon {
+  font-size: 1.1rem;
+}
+
+.option-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* Chapter Table Container */
 .chapter-table-container {
   overflow-x: auto;
@@ -1974,6 +1781,7 @@ input[type="text"]:focus {
 
 .chapter-table {
   width: 100%;
+  min-width: 800px; /* Ensure table is scrollable on smaller screens */
   border-collapse: collapse;
   border-spacing: 0;
   font-size: 0.95rem;
@@ -2004,6 +1812,11 @@ input[type="text"]:focus {
   padding: 12px 15px;
   border-bottom: 1px solid #e0e0e0;
   vertical-align: middle;
+}
+
+.chapter-table td {
+  font-size: 0.9rem;
+  color: #555;
 }
 
 .chapter-table th {
@@ -2116,6 +1929,7 @@ input[type="text"]:focus {
   font-size: 0.8rem;
   font-weight: 600;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .badge-excellent {
@@ -2151,6 +1965,10 @@ input[type="text"]:focus {
 }
 
 .score-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   width: 20%;
   text-align: center !important;
   vertical-align: middle !important;

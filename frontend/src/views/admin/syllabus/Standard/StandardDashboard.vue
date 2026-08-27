@@ -328,6 +328,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Modal } from 'bootstrap'
 import { useToastStore } from '@/store/toast'
 import axiosInstance from '@/config/axios'
+import { boardSyllabusQueryString } from '@/utils/boardSyllabus'
 
 interface Board {
   id: number
@@ -419,6 +420,16 @@ onMounted(async () => {
 
     // Fetch subjects for this combination
     await fetchSubjects()
+    router.replace({
+      query: boardSyllabusQueryString({
+        board: selectedBoard.value?.id,
+        medium: selectedMedium.value?.id,
+        standard: selectedStandard.value?.id,
+        boardName: selectedBoard.value?.name,
+        mediumName: selectedMedium.value?.instruction_medium,
+        standardName: selectedStandard.value?.name,
+      }),
+    })
   } catch (error) {
     console.error('Error fetching details:', error)
   }
@@ -467,11 +478,11 @@ const navigateToAddSubject = async () => {
     const boardSubjects = response.data
 
     // Get the current mapped subject IDs from our subjects list
-    const currentSubjectIds = subjects.value.map((subject) => subject.id)
+    const currentSubjectIds = new Set(subjects.value.map((subject) => subject.id))
 
     // Set all subjects as available BUT FILTER OUT already mapped subjects
     availableSubjects.value = boardSubjects
-      .filter((subject: BoardSubject) => !currentSubjectIds.includes(subject.id))
+      .filter((subject: BoardSubject) => !currentSubjectIds.has(subject.id))
       .map((subject: BoardSubject) => ({
       id: subject.id,
       name: subject.name,
@@ -497,11 +508,16 @@ const navigateToSubject = (subject: Subject) => {
   router.push({
     name: subject.isNew ? 'newSubject' : 'subjectSyllabus',
     params: { id: subject.id.toString() },
-    query: {
+    query: boardSyllabusQueryString({
       board: selectedBoard.value?.id,
       medium: selectedMedium.value?.id,
       standard: selectedStandard.value?.id,
-    },
+      subject: subject.id,
+      boardName: selectedBoard.value?.name,
+      mediumName: selectedMedium.value?.instruction_medium,
+      standardName: selectedStandard.value?.name,
+      subjectName: subject.name,
+    }),
   })
 }
 
@@ -588,7 +604,7 @@ const cleanupModal = (modal: bootstrap.Modal, modalElement: HTMLElement) => {
   modal.hide()
   setTimeout(() => {
     modalElement.remove()
-    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove())
+    for (const backdrop of document.querySelectorAll('.modal-backdrop')) backdrop.remove();
     document.body.classList.remove('modal-open')
     document.body.style.removeProperty('overflow')
     document.body.style.removeProperty('padding-right')
@@ -630,7 +646,7 @@ const removeSelectedSubjects = async () => {
     modalElement.setAttribute('tabindex', '-1')
     modalElement.setAttribute('aria-labelledby', 'deleteConfirmationModalLabel')
     modalElement.setAttribute('aria-hidden', 'true')
-    modalElement.setAttribute('data-bs-backdrop', 'static')
+    modalElement.dataset.bsBackdrop = 'static'
 
     modalElement.innerHTML = `
       <div class="modal-dialog modal-dialog-centered">

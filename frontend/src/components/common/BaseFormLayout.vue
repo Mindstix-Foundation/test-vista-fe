@@ -28,7 +28,7 @@
           <div class="col-12 col-sm-10 col-md-8 mt-3">
             <div class="text-center">
               <button type="submit" class="btn btn-dark" :disabled="isSubmitting">
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></span>
+                <output v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></output>
                 {{ submitButtonText }}
               </button>
             </div>

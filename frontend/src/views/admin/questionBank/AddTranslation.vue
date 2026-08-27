@@ -5,39 +5,32 @@
         <!-- Update the router-link to preserve query parameters -->
         <button 
           class="btn btn-close" 
-          @click="() => {
-            const currentRoute = router.currentRoute.value;
-            console.log('AddTranslation - Close button clicked, current route:', currentRoute);
-            console.log('AddTranslation - Current query params:', currentRoute.query);
-            
-            const queryParams = {
-              page: currentRoute.query.returnPage ?? undefined,
-              sort: currentRoute.query.returnSort ?? undefined,
-              topic: currentRoute.query.returnTopic ?? undefined,
-              type: currentRoute.query.returnType ?? undefined,
-              search: currentRoute.query.returnSearch ?? undefined
-            };
-            
-            console.log('AddTranslation - Navigating back with params:', queryParams);
-            
-            router.push({ 
-              name: 'translationPending',
-              query: queryParams
-            });
-          }" 
+          @click="navigateToTranslationPending"
           aria-label="Close">
         </button>
       </div>
       <div class="row justify-content-center align-items-center my-2">
         <div class="col col-12 col-sm-10">
-          <p class="text-muted text-start fs-5 m-0">
-            <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
-            <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
-          </p>
-          <h4 class="fw-bolder text-start text-dark m-0">
-            Standard {{ questionBankData.standardName }}
-            <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
-          </h4>
+          <template v-if="isExamScope">
+            <p class="text-muted text-start fs-5 m-0">
+              {{ questionBankData.programLabel }}
+              <span v-if="questionBankData.mediumName"> | {{ questionBankData.mediumName }}</span>
+            </p>
+            <h4 class="fw-bolder text-start text-dark m-0">
+              {{ questionBankData.nodeName }}
+              <span class="d-block text-start text-secondary">Competitive / Entrance syllabus</span>
+            </h4>
+          </template>
+          <template v-else>
+            <p class="text-muted text-start fs-5 m-0">
+              <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
+              <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
+            </p>
+            <h4 class="fw-bolder text-start text-dark m-0">
+              Standard {{ questionBankData.standardName }}
+              <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
+            </h4>
+          </template>
           <h4 class="text-left fw-bolder text-uppercase mb-2" id="pageHeader">Add Translation</h4>
         </div>
       </div>
@@ -715,11 +708,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import { useToastStore } from '@/store/toast'
 import ImageUploadEditor from '@/components/common/ImageUploadEditor.vue'
+import { resolveExamChapterId } from '@/utils/examSyllabus'
 
 // Define custom error type for Axios errors
 interface AxiosErrorResponse {
@@ -745,6 +739,7 @@ const isLoading = ref(true)
 
 // Data from localStorage
 const questionBankData = ref({
+  scope: 'board' as 'board' | 'exam',
   boardId: '',
   boardName: '',
   mediumId: '',
@@ -755,8 +750,53 @@ const questionBankData = ref({
   subjectName: '',
   chapterId: '',
   chapterName: '',
-  mediumStandardSubjectId: null
+  mediumStandardSubjectId: null as number | null,
+  programId: '',
+  programLabel: '',
+  nodeId: '',
+  nodeName: '',
 })
+
+const isExamScope = computed(() => {
+  const data = questionBankData.value
+  return data.scope === 'exam' || (!!data.programId && !!resolveExamChapterId(data))
+})
+
+function translationPendingQuery(extra: Record<string, string | undefined> = {}) {
+  const currentRoute = router.currentRoute.value
+  const query: Record<string, string | undefined> = {
+    page: currentRoute.query.returnPage?.toString(),
+    sort: currentRoute.query.returnSort?.toString(),
+    topic: currentRoute.query.returnTopic?.toString(),
+    type: currentRoute.query.returnType?.toString(),
+    search: currentRoute.query.returnSearch?.toString(),
+    ...extra,
+  }
+  if (isExamScope.value) {
+    query.scope = 'exam'
+    query.programId = String(questionBankData.value.programId)
+    query.chapterId = String(
+      questionBankData.value.chapterId || resolveExamChapterId(questionBankData.value) || '',
+    )
+    if (questionBankData.value.stageId) query.stageId = String(questionBankData.value.stageId)
+    if (questionBankData.value.subjectId) query.subjectId = String(questionBankData.value.subjectId)
+    if ((questionBankData.value as { topicId?: string }).topicId) {
+      query.topicId = String((questionBankData.value as { topicId?: string }).topicId)
+    }
+    if (questionBankData.value.mediumId) {
+      query.mediumId = String(questionBankData.value.mediumId)
+      if (questionBankData.value.mediumName) query.mediumName = questionBankData.value.mediumName
+    }
+  }
+  return query
+}
+
+function navigateToTranslationPending(extra: Record<string, string | undefined> = {}) {
+  router.push({
+    name: 'translationPending',
+    query: translationPendingQuery(extra),
+  })
+}
 
 // Define interfaces for image handling
 interface QuestionImage {
@@ -1115,17 +1155,10 @@ function processFillInTheBlanks(translationRequest) {
 
 // Get query parameters for navigation
 function getQueryParams() {
-  const currentRoute = router.currentRoute.value;
-  
-  return {
+  return translationPendingQuery({
     success: 'true',
     message: 'Translation added successfully',
-    page: currentRoute.query.returnPage ?? undefined,
-    sort: currentRoute.query.returnSort ?? undefined,
-    topic: currentRoute.query.returnTopic ?? undefined,
-    type: currentRoute.query.returnType ?? undefined,
-    search: currentRoute.query.returnSearch ?? undefined
-  };
+  })
 }
 
 async function saveTranslation() {
@@ -1140,7 +1173,7 @@ async function saveTranslation() {
     isFullscreenLoading.value = true;
 
     // Prepare the translation request
-    const targetMediumId = parseInt(questionBankData.value.mediumId.toString());
+    const targetMediumId = Number.parseInt(questionBankData.value.mediumId.toString(), 10);
     const translationRequest = {
       question_text: translatedQuestion.value.question,
       instruction_medium_id: targetMediumId
@@ -1241,7 +1274,7 @@ function getQuestionIdFromRoute() {
       message: 'Question ID not provided',
       type: 'error'
     });
-    router.push({ name: 'translationPending' });
+    navigateToTranslationPending();
     return null;
   }
   return id;
@@ -1251,6 +1284,26 @@ async function fetchQuestionDetails() {
   const questionDetailsResponse = await axiosInstance.get(`/questions/${questionId.value}`);
   const questionDetails = questionDetailsResponse.data;
 
+  if (isExamScope.value) {
+    if (!questionDetails?.question_texts?.length) {
+      console.error('Question has no text content');
+      toastStore.showToast({
+        title: 'Error',
+        message: 'Question has no text content',
+        type: 'error'
+      });
+      navigateToTranslationPending();
+      return false;
+    }
+
+    const topicFromQuestion =
+      questionDetails.question_topics?.[0]?.topic_id ??
+      questionDetails.question_texts?.[0]?.topic?.id ??
+      null;
+    topicId.value = topicFromQuestion;
+    return true;
+  }
+
   // Check if question has any question_texts with topics
   if (!questionDetails?.question_texts?.[0]?.topic?.id) {
     console.error('Question has no associated topic');
@@ -1259,7 +1312,7 @@ async function fetchQuestionDetails() {
       message: 'Question has no associated topic',
       type: 'error'
     });
-    router.push({ name: 'translationPending' });
+    navigateToTranslationPending();
     return false;
   }
 
@@ -1270,6 +1323,10 @@ async function fetchQuestionDetails() {
 }
 
 async function fetchVerifiedTexts() {
+  if (isExamScope.value && !topicId.value) {
+    const response = await axiosInstance.get(`/questions/${questionId.value}`);
+    return response.data;
+  }
   const response = await axiosInstance.get(`/questions/${questionId.value}/topic/${topicId.value}/verified-texts`);
   return response.data;
 }
@@ -1282,7 +1339,7 @@ function processAvailableTranslations(questionData) {
   // Find the original translation if it exists
   const originalIndex = availableTranslations.value.findIndex(t => t.translation_status === 'original');
   // Set default translation to the original one if available, otherwise use the first one
-  selectedTranslationIndex.value = originalIndex >= 0 ? originalIndex : 0;
+  selectedTranslationIndex.value = Math.max(0, originalIndex);
 
   // Process selected translation if available
   if (availableTranslations.value.length > 0) {
@@ -1334,24 +1391,24 @@ function processQuestionOptions(selectedTranslation) {
 function loadMcqOptions(selectedTranslation) {
   originalOptions.value = selectedTranslation.mcq_options.map((opt: McqOption) => opt.option_text);
   // Initialize translated options array with the same length
-  translatedOptions.value = Array(originalOptions.value.length).fill('');
+  translatedOptions.value = new Array(originalOptions.value.length).fill('');
 
   // Initialize arrays for option images and correct status
   initializeMcqArrays(originalOptions.value.length);
   
   // Process each option
-  selectedTranslation.mcq_options.forEach((option: McqOption, index: number) => {
+  for (const [index, option] of selectedTranslation.mcq_options.entries()) {
     processOptionDetails(option, index);
-  });
+  }
 }
 
 function initializeMcqArrays(length) {
-  originalOptionImages.value = Array(length).fill(null);
-  optionImageLoading.value = Array(length).fill(false);
-  optionImageError.value = Array(length).fill(false);
-  originalOptionIsCorrect.value = Array(length).fill(false);
-  optionImageIds.value = Array(length).fill(null);
-  optionImagePreviews.value = Array(length).fill(null);
+  originalOptionImages.value = new Array(length).fill(null);
+  optionImageLoading.value = new Array(length).fill(false);
+  optionImageError.value = new Array(length).fill(false);
+  originalOptionIsCorrect.value = new Array(length).fill(false);
+  optionImageIds.value = new Array(length).fill(null);
+  optionImagePreviews.value = new Array(length).fill(null);
 }
 
 function processOptionDetails(option, index) {
@@ -1370,9 +1427,9 @@ function processOptionDetails(option, index) {
 
 function initializeTextareas() {
   setTimeout(() => {
-    document.querySelectorAll('textarea').forEach(textarea => {
+    for (const textarea of document.querySelectorAll('textarea')) {
       autoResize({ target: textarea } as unknown as Event);
-    });
+    }
   }, 0);
 }
 
@@ -1394,7 +1451,7 @@ function handleLoadError(error) {
   });
 
   // Redirect back if we couldn't load the question
-  router.push({ name: 'translationPending' });
+  navigateToTranslationPending();
 }
 
 // New function to handle changing the selected translation
@@ -1416,10 +1473,10 @@ function changeTranslation(index: number) {
   updateQuestionOptions(selectedTranslation);
 
   // Reset translated options to empty for the new translation
-  translatedOptions.value = Array(originalOptions.value.length).fill('');
+  translatedOptions.value = new Array(originalOptions.value.length).fill('');
 
   // Reset preview images
-  optionImagePreviews.value = Array(originalOptions.value.length).fill(null);
+  optionImagePreviews.value = new Array(originalOptions.value.length).fill(null);
 
   // Resize textareas after update
   resizeTextareas();
@@ -1465,16 +1522,16 @@ function isOptionTypeQuestion(type) {
 
 // Helper function to reset option arrays
 function resetOptionArrays(optionsCount) {
-  originalOptionImages.value = Array(optionsCount).fill(null);
-  optionImageLoading.value = Array(optionsCount).fill(false);
-  optionImageError.value = Array(optionsCount).fill(false);
-  originalOptionIsCorrect.value = Array(optionsCount).fill(false);
-  optionImageIds.value = Array(optionsCount).fill(null);
+  originalOptionImages.value = new Array(optionsCount).fill(null);
+  optionImageLoading.value = new Array(optionsCount).fill(false);
+  optionImageError.value = new Array(optionsCount).fill(false);
+  originalOptionIsCorrect.value = new Array(optionsCount).fill(false);
+  optionImageIds.value = new Array(optionsCount).fill(null);
 }
 
 // Helper function to process options
 function processOptions(options) {
-  options.forEach((option, index) => {
+  for (const [index, option] of options.entries()) {
     // Set correct option
     if (option.is_correct) {
       originalOptionIsCorrect.value[index] = true;
@@ -1482,7 +1539,7 @@ function processOptions(options) {
 
     // Set option image if available
     processOptionImage(option, index);
-  });
+  }
 }
 
 // Helper function to process option image
@@ -1500,12 +1557,12 @@ function resizeTextareas() {
   const textareas = document.querySelectorAll('textarea');
   if (textareas.length > 0) {
     // Process each textarea with a small delay between them
-    textareas.forEach((textarea, index) => {
+    for (const [index, textarea] of textareas.entries()) {
       // Stagger the resize operations slightly
       setTimeout(() => {
         autoResizeElement(textarea);
       }, index * 5); // 5ms delay between each textarea resize
-    });
+    }
   }
 }
 
@@ -1683,7 +1740,7 @@ async function loadMatchPairs(selectedTranslation) {
   );
 
   // Initialize translatedMatchPairs with empty strings for each pair
-  translatedMatchPairs.value = Array(originalMatchPairs.value.length)
+  translatedMatchPairs.value = new Array(originalMatchPairs.value.length)
     .fill(0)
     .map(() => ({ left_text: '', right_text: '' }));
     
@@ -1691,22 +1748,22 @@ async function loadMatchPairs(selectedTranslation) {
   initializeMatchPairArrays(originalMatchPairs.value.length);
   
   // Process each match pair
-  selectedTranslation.match_pairs.forEach((pair: MatchPair, index: number) => {
+  for (const [index, pair] of selectedTranslation.match_pairs.entries()) {
     processMatchPairImages(pair, index);
-  });
+  }
 }
 
 function initializeMatchPairArrays(length) {
-  originalMatchPairLeftImages.value = Array(length).fill(null);
-  originalMatchPairRightImages.value = Array(length).fill(null);
-  pairLeftImageLoading.value = Array(length).fill(false);
-  pairLeftImageError.value = Array(length).fill(false);
-  pairRightImageLoading.value = Array(length).fill(false);
-  pairRightImageError.value = Array(length).fill(false);
-  pairLeftImagePreviews.value = Array(length).fill(null);
-  pairRightImagePreviews.value = Array(length).fill(null);
-  pairLeftImageIds.value = Array(length).fill(null);
-  pairRightImageIds.value = Array(length).fill(null);
+  originalMatchPairLeftImages.value = new Array(length).fill(null);
+  originalMatchPairRightImages.value = new Array(length).fill(null);
+  pairLeftImageLoading.value = new Array(length).fill(false);
+  pairLeftImageError.value = new Array(length).fill(false);
+  pairRightImageLoading.value = new Array(length).fill(false);
+  pairRightImageError.value = new Array(length).fill(false);
+  pairLeftImagePreviews.value = new Array(length).fill(null);
+  pairRightImagePreviews.value = new Array(length).fill(null);
+  pairLeftImageIds.value = new Array(length).fill(null);
+  pairRightImageIds.value = new Array(length).fill(null);
 }
 
 function processMatchPairImages(pair, index) {

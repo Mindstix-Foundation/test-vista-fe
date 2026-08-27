@@ -1,24 +1,21 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteRecordRaw } from 'vue-router'
+import type { NavigationGuardNext, RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
 import BoardDashboard from '@/views/admin/board/BoardDashboard.vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import FormLayout from '@/layouts/FormLayout.vue'
 import LoginLayout from '@/layouts/LoginLayout.vue'
 import EditChapter from '@/views/admin/syllabus/subject/EditChapter.vue'
-import LoginHomepage from '@/views/login/LoginHomepage.vue'
+import LoginPage from '@/views/login/LoginPage.vue'
+import RegistrationPage from '@/views/login/RegistrationPage.vue'
 import ForgetPassword from '@/views/login/ForgetPassword.vue'
 import ResetPassword from '@/views/login/ResetPassword.vue'
 import ChangePassword from '@/views/login/ChangePassword.vue'
-import StudentRegistration from '@/views/login/StudentRegistration.vue'
-import ItiStudentRegistration from '@/views/login/ItiStudentRegistration.vue'
-import ItiStudentLogin from '@/views/login/ItiStudentLogin.vue'
-import TeacherAdminLogin from '@/views/login/TeacherAdminLogin.vue'
 import AdminProfile from '@/views/admin/profile/AdminProfile.vue'
 import TeacherProfile from '@/views/teacher/profile/TeacherProfile.vue'
 import { useAuthStore } from '@/stores/auth'
 
 // Define public routes that don't require authentication
-const publicRoutes = ['/login', '/forgot-password', '/reset-password', '/change-password', '/student-registration', '/iti-student-registration', '/iti-student-login', '/teacher-admin-login']
+const publicRoutes = new Set(['/login', '/register', '/forgot-password', '/reset-password'])
 
 // Update the route meta type
 declare module 'vue-router' {
@@ -32,32 +29,40 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'login',
-    component: LoginHomepage,
+    component: LoginPage,
     meta: { requiresAuth: false },
   },
   {
-    path: '/student-registration',
-    name: 'studentRegistration',
-    component: StudentRegistration,
+    path: '/register',
+    name: 'register',
+    component: RegistrationPage,
     meta: { requiresAuth: false },
   },
+  // Legacy auth URLs → unified login / registration pages
   {
-    path: '/iti-student-registration',
-    name: 'iti-student-registration',
-    component: ItiStudentRegistration,
-    meta: { requiresAuth: false },
+    path: '/teacher-admin-login',
+    name: 'teacher-admin-login',
+    redirect: { name: 'login' },
   },
   {
     path: '/iti-student-login',
     name: 'iti-student-login',
-    component: ItiStudentLogin,
-    meta: { requiresAuth: false },
+    redirect: { name: 'login' },
   },
   {
-    path: '/teacher-admin-login',
-    name: 'teacher-admin-login',
-    component: TeacherAdminLogin,
-    meta: { requiresAuth: false },
+    path: '/student-registration',
+    name: 'studentRegistration',
+    redirect: { name: 'register' },
+  },
+  {
+    path: '/iti-student-registration',
+    name: 'iti-student-registration',
+    redirect: { name: 'register' },
+  },
+  {
+    path: '/aspirant-registration',
+    name: 'aspirantRegistration',
+    redirect: { name: 'register', query: { type: 'aspirant' } },
   },
   {
     path: '/forgot-password',
@@ -69,6 +74,12 @@ const routes: RouteRecordRaw[] = [
     path: '/reset-password',
     name: 'resetPassword',
     component: ResetPassword,
+    meta: { requiresAuth: false },
+  },
+  {
+    path: '/browse-orgs',
+    name: 'browseOrgs',
+    component: () => import('@/views/public/BrowseOrgs.vue'),
     meta: { requiresAuth: false },
   },
   {
@@ -92,6 +103,17 @@ const routes: RouteRecordRaw[] = [
         path: 'board',
         name: 'board',
         component: BoardDashboard,
+        beforeEnter: (to) => {
+          const tab = to.query.tab
+          if (tab === 'ENTRANCE' || tab === 'COMPETITIVE') {
+            return { name: 'examCatalog', query: { tab } }
+          }
+        },
+      },
+      {
+        path: 'exams',
+        name: 'examCatalog',
+        component: () => import('@/views/admin/exams/ExamCatalogDashboard.vue'),
       },
       {
         path: 'school',
@@ -117,6 +139,41 @@ const routes: RouteRecordRaw[] = [
         path: 'syllabus/subject/:id',
         name: 'subjectSyllabus',
         component: () => import('@/views/admin/syllabus/subject/SubjectDashboard.vue'),
+      },
+      {
+        path: 'syllabus/exam/:programId',
+        name: 'examSyllabusSubjects',
+        component: () => import('@/views/admin/syllabus/exam/ExamSubjectDashboard.vue'),
+      },
+      {
+        path: 'syllabus/exam/:programId/subjects',
+        redirect: (to) => ({
+          name: 'examSyllabusSubjects',
+          params: { programId: to.params.programId },
+          query: to.query as Record<string, string>,
+        }),
+      },
+      {
+        path: 'syllabus/exam/:programId/sections',
+        name: 'examSyllabusSections',
+        redirect: (to) => ({
+          name: 'examSyllabusSubjects',
+          params: { programId: to.params.programId },
+          query: to.query as Record<string, string>,
+        }),
+      },
+      {
+        path: 'syllabus/exam/:programId/subject/:subjectId',
+        name: 'examSyllabusChapters',
+        component: () => import('@/views/admin/syllabus/exam/ExamChapterDashboard.vue'),
+      },
+      {
+        path: 'syllabus/program/:programId',
+        redirect: (to) => ({
+          name: 'examSyllabusSubjects',
+          params: { programId: to.params.programId },
+          query: to.query as Record<string, string>,
+        }),
       },
       {
         path: 'pattern',
@@ -153,6 +210,18 @@ const routes: RouteRecordRaw[] = [
         name: 'imageUploadDemo',
         component: () => import('@/views/admin/questionBank/ImageUploadDemo.vue'),
       },
+      // Legacy exam-catalog URLs → dedicated exam catalog page
+      {
+        path: 'exam-catalog',
+        redirect: { name: 'examCatalog' },
+      },
+      {
+        path: 'exam-catalog/syllabus/:programId',
+        redirect: (to) => ({
+          name: 'examSyllabusSections',
+          params: { programId: to.params.programId },
+        }),
+      },
     ],
   },
   // Form routes without navbar
@@ -170,6 +239,16 @@ const routes: RouteRecordRaw[] = [
         path: 'board/:id/edit',
         name: 'editBoard',
         component: () => import('@/views/admin/board/EditBoard.vue'),
+      },
+      {
+        path: 'exams/add',
+        name: 'addExam',
+        component: () => import('@/views/admin/exams/AddExam.vue'),
+      },
+      {
+        path: 'exams/:id/edit',
+        name: 'editExam',
+        component: () => import('@/views/admin/exams/EditExam.vue'),
       },
       {
         path: 'school/add',
@@ -197,6 +276,21 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/syllabus/subject/AddChapter.vue'),
       },
       {
+        path: 'syllabus/exam/:programId/subject/:subjectId/add-chapter',
+        name: 'examAddChapter',
+        component: () => import('@/views/admin/syllabus/exam/ExamAddChapter.vue'),
+      },
+      {
+        path: 'syllabus/exam/:programId/subject/:subjectId/chapter/:chapterId/edit',
+        name: 'examEditChapter',
+        component: () => import('@/views/admin/syllabus/exam/ExamEditChapter.vue'),
+      },
+      {
+        path: 'syllabus/exam/:programId/add-subject',
+        name: 'examAddSubject',
+        component: () => import('@/views/admin/syllabus/exam/AddExamSubject.vue'),
+      },
+      {
         path: 'questionBank/edit/:id',
         name: 'editQuestion',
         component: () => import('@/views/admin/questionBank/EditQuestion.vue'),
@@ -206,6 +300,16 @@ const routes: RouteRecordRaw[] = [
         path: 'pattern/add',
         name: 'createPattern',
         component: () => import('@/views/admin/pattern/AddPattern.vue'),
+      },
+      {
+        path: 'pattern/exam/add',
+        name: 'createExamPattern',
+        component: () => import('@/views/admin/pattern/AddExamPaperTemplate.vue'),
+      },
+      {
+        path: 'pattern/exam/:id/edit',
+        name: 'editExamPattern',
+        component: () => import('@/views/admin/pattern/EditExamPaperTemplate.vue'),
       },
       {
         path: 'pattern/:id/edit',
@@ -261,9 +365,52 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/teacher/home/TeacherHome.vue'),
       },
       {
+        path: 'organization',
+        name: 'teacherOrganization',
+        component: () => import('@/views/teacher/organization/OrganizationHome.vue'),
+      },
+      {
+        path: 'create-org',
+        name: 'teacherCreateOrg',
+        component: () => import('@/views/teacher/organization/CreateOrg.vue'),
+      },
+      {
+        path: 'join-org',
+        name: 'teacherJoinOrg',
+        component: () => import('@/views/teacher/organization/JoinOrg.vue'),
+      },
+      {
+        path: 'org-requests',
+        name: 'teacherOrgRequests',
+        component: () => import('@/views/teacher/organization/ManageJoinRequests.vue'),
+      },
+      {
+        path: 'organization/join-requests',
+        redirect: { name: 'teacherOrgRequests' },
+      },
+      {
+        path: 'org-cohorts',
+        name: 'teacherOrgCohorts',
+        component: () => import('@/views/teacher/organization/ManageCohorts.vue'),
+      },
+      {
+        path: 'org-groups',
+        name: 'teacherOrgGroups',
+        component: () => import('@/views/teacher/organization/ManageGroups.vue'),
+      },
+      {
+        path: 'org-invite-csv',
+        name: 'teacherOrgInviteCsv',
+        component: () => import('@/views/teacher/organization/InviteMembersCsv.vue'),
+      },
+      {
         path: 'assign-test',
         name: 'assignOnlineTest',
         component: () => import('@/views/teacher/assignTest/assignTestDashboard.vue'),
+      },
+      {
+        path: 'assign-online-test',
+        redirect: { name: 'assignOnlineTest' },
       },
       {
         path: 'assign-test/:testPaperId/students',
@@ -274,6 +421,11 @@ const routes: RouteRecordRaw[] = [
         path: 'assign-test/create',
         name: 'createTestAssign',
         component: () => import('@/views/teacher/assignTest/createTest.vue'),
+      },
+      {
+        path: 'assign-test/create-mock',
+        name: 'createMockTest',
+        component: () => import('@/views/teacher/assignTest/createMockTest.vue'),
       },
       {
         path: 'assign-test/select-pattern',
@@ -324,6 +476,15 @@ const routes: RouteRecordRaw[] = [
         path: 'create-test-paper',
         name: 'createTestPaper',
         component: () => import('@/views/teacher/createTestPaper/createTestPaperDashboard.vue'),
+      },
+      // Option C: legacy paths — exam category selection now lives in the assign dashboard tabs
+      {
+        path: 'competitive-exams',
+        redirect: { name: 'assignOnlineTest' },
+      },
+      {
+        path: 'entrance-exams',
+        redirect: { name: 'assignOnlineTest' },
       },
       {
         path: 'select-test-pattern',
@@ -389,6 +550,21 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/student/exam/AssignedTest.vue'),
       },
       {
+        path: 'smart-test',
+        name: 'smartTest',
+        component: () => import('@/views/student/smartTest/SmartTestDashboard.vue'),
+      },
+      {
+        path: 'smart-test/board/create',
+        name: 'createBoardSmartTest',
+        component: () => import('@/views/student/smartTest/CreateBoardSmartTest.vue'),
+      },
+      {
+        path: 'smart-test/exam/create',
+        name: 'createAspirantSmartTest',
+        component: () => import('@/views/student/smartTest/CreateAspirantSmartTest.vue'),
+      },
+      {
         path: 'results',
         name: 'studentResults',
         component: () => import('@/views/student/results/StudentResults.vue'),
@@ -397,6 +573,16 @@ const routes: RouteRecordRaw[] = [
         path: 'profile',
         name: 'studentProfile',
         component: () => import('@/views/student/profile/StudentProfile.vue'),
+      },
+      {
+        path: 'join-coaching',
+        name: 'studentJoinCoaching',
+        component: () => import('@/views/student/organization/JoinCoaching.vue'),
+      },
+      {
+        path: 'exam/result',
+        name: 'examResult',
+        component: () => import('@/views/student/exam/Result.vue'),
       },
     ],
   },
@@ -411,12 +597,6 @@ const routes: RouteRecordRaw[] = [
     path: '/student/exam/take',
     name: 'takeExam',
     component: () => import('@/views/student/exam/TakeExam.vue'),
-    meta: { requiresAuth: true, roles: ['STUDENT'] },
-  },
-  {
-    path: '/student/exam/result',
-    name: 'examResult',
-    component: () => import('@/views/student/exam/Result.vue'),
     meta: { requiresAuth: true, roles: ['STUDENT'] },
   },
   {
@@ -455,6 +635,57 @@ router.afterEach(() => {
   // Logging disabled
 });
 
+function homePathForRole(userRole: string | null | undefined, fallback: string): string {
+  if (userRole === 'ADMIN') return '/admin/board'
+  if (userRole === 'TEACHER') return '/teacher/home'
+  if (userRole === 'STUDENT') return '/student/exam'
+  return fallback
+}
+
+function redirectAuthenticatedPublicRoute(
+  to: RouteLocationNormalized,
+  userRole: string | null | undefined,
+  next: NavigationGuardNext,
+) {
+  if (to.path === '/register') {
+    next({
+      path: homePathForRole(userRole, '/teacher/home'),
+      query: { notice: 'logout-to-register' },
+    })
+    return
+  }
+  next({ path: homePathForRole(userRole, '/admin/board') })
+}
+
+async function runAuthNavigationGuard(
+  to: RouteLocationNormalized,
+  authStore: ReturnType<typeof useAuthStore>,
+  next: NavigationGuardNext,
+) {
+  const isAuthenticated = await authStore.checkAuth()
+  const userRole = authStore.userRole
+
+  if (to.meta.requiresAuth) {
+    if (!isAuthenticated) {
+      next({ name: 'login', query: { redirect: to.fullPath } })
+      return
+    }
+    if (to.meta.roles && userRole && !to.meta.roles.includes(userRole)) {
+      next({ name: 'login' })
+      return
+    }
+    next()
+    return
+  }
+
+  if (isAuthenticated && publicRoutes.has(to.path)) {
+    redirectAuthenticatedPublicRoute(to, userRole, next)
+    return
+  }
+
+  next()
+}
+
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
@@ -466,57 +697,24 @@ router.beforeEach(async (to, from, next) => {
   }
   
   // Add a flag to prevent multiple simultaneous auth checks
-  if ((window as any).authCheckInProgress) {
+  if ((globalThis as any).authCheckInProgress) {
     next()
     return
   }
   
   try {
-    (window as any).authCheckInProgress = true
-    const isAuthenticated = await authStore.checkAuth()
-    const userRole = authStore.userRole
-
-    // Check if route requires authentication
-    if (to.meta.requiresAuth) {
-      if (!isAuthenticated) {
-        // Not authenticated, redirect to login
-        next({ name: 'login', query: { redirect: to.fullPath } })
-        return
-      }
-
-      // Check role requirements
-      if (to.meta.roles && userRole && !to.meta.roles.includes(userRole)) {
-        // User's role is not authorized
-        next({ name: 'login' })
-        return
-      }
-    } else if (isAuthenticated && publicRoutes.includes(to.path)) {
-      // If user is authenticated and tries to access public routes like login
-      // Check user role and redirect appropriately
-      if (userRole === 'ADMIN') {
-        next({ path: '/admin/board' })
-      } else if (userRole === 'TEACHER') {
-        next({ path: '/teacher/home' })
-      } else if (userRole === 'STUDENT') {
-        next({ path: '/student/exam' })
-      } else {
-        next({ path: '/admin/board' })
-      }
-      return
-    }
-
-    next()
+    (globalThis as any).authCheckInProgress = true
+    await runAuthNavigationGuard(to, authStore, next)
   } catch (error) {
     console.error('Navigation guard error:', error)
-    // Clear auth on error and redirect to login
     authStore.clearAuth()
-    if (to.path !== '/login') {
-      next({ name: 'login' })
-    } else {
+    if (to.path === '/login') {
       next()
+    } else {
+      next({ name: 'login' })
     }
   } finally {
-    (window as any).authCheckInProgress = false
+    (globalThis as any).authCheckInProgress = false
   }
 })
 

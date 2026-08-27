@@ -1,5 +1,7 @@
 <template>
-  <div class="container my-4">
+  <div>
+    <AppBreadcrumb />
+    <div class="container my-4">
     <div class="container">
       <div class="row g-2 justify-content-end">
         <router-link
@@ -50,14 +52,17 @@
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from '@/store/toast'
+import AppBreadcrumb from '@/components/common/AppBreadcrumb.vue'
 import ChapterFormComponent from '@/components/forms/ChapterFormComponent.vue'
 import axiosInstance from '@/config/axios'
+import { boardSyllabusQueryString } from '@/utils/boardSyllabus'
 
 interface Board {
   id: number
@@ -115,6 +120,18 @@ const fetchData = async () => {
     // Fetch subject details
     const subjectResponse = await axiosInstance.get(`/subjects/${route.query.subject}`)
     selectedSubject.value = subjectResponse.data
+    router.replace({
+      query: boardSyllabusQueryString({
+        board: selectedBoard.value?.id,
+        medium: selectedMedium.value?.id,
+        standard: selectedStandard.value?.id,
+        subject: selectedSubject.value?.id,
+        boardName: selectedBoard.value?.name,
+        mediumName: selectedMedium.value?.instruction_medium,
+        standardName: selectedStandard.value?.name,
+        subjectName: selectedSubject.value?.name,
+      }),
+    })
   } catch (error) {
     console.error('Error fetching data:', error)
     toastStore.showToast({
@@ -146,7 +163,16 @@ const fetchChapterData = async () => {
     router.push({
       name: 'subjectSyllabus',
       params: { id: route.query.subject as string },
-      query: route.query,
+      query: boardSyllabusQueryString({
+        board: selectedBoard.value?.id,
+        medium: selectedMedium.value?.id,
+        standard: selectedStandard.value?.id,
+        subject: selectedSubject.value?.id,
+        boardName: selectedBoard.value?.name,
+        mediumName: selectedMedium.value?.instruction_medium,
+        standardName: selectedStandard.value?.name,
+        subjectName: selectedSubject.value?.name,
+      }),
     })
   }
 }
@@ -180,7 +206,7 @@ const updateChapter = async (formData: ChapterData) => {
           // Create new topic
           await axiosInstance.post('/topics', {
             ...topicData,
-            chapter_id: parseInt(chapterId as string, 10),
+            chapter_id: Number.parseInt(chapterId as string, 10),
           })
         }
       }),
@@ -204,7 +230,16 @@ const updateChapter = async (formData: ChapterData) => {
     router.push({
       name: 'subjectSyllabus',
       params: { id: route.query.subject as string },
-      query: route.query,
+      query: boardSyllabusQueryString({
+        board: selectedBoard.value?.id,
+        medium: selectedMedium.value?.id,
+        standard: selectedStandard.value?.id,
+        subject: selectedSubject.value?.id,
+        boardName: selectedBoard.value?.name,
+        mediumName: selectedMedium.value?.instruction_medium,
+        standardName: selectedStandard.value?.name,
+        subjectName: selectedSubject.value?.name,
+      }),
     })
   } catch (error) {
     console.error('Error updating chapter:', error)

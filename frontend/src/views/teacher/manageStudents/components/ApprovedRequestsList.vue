@@ -1,9 +1,9 @@
 <template>
   <div>
     <div v-if="loading" class="text-center py-4">
-      <div class="spinner-border text-success" role="status">
+      <output class="spinner-border text-success">
         <span class="visually-hidden">Loading...</span>
-      </div>
+      </output>
       <p class="mt-2 text-muted">Loading approved requests...</p>
     </div>
 
@@ -113,7 +113,7 @@
               <!-- Processing indicator -->
               <div v-if="processingRequestId === request.id" class="mt-3">
                 <div class="d-flex align-items-center text-muted">
-                  <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                  <output class="spinner-border spinner-border-sm me-2"></output>
                   Processing request...
                 </div>
               </div>
@@ -183,7 +183,7 @@
             @click="submitResponseUpdate"
             :disabled="processing || !updateForm.teacher_response.trim()"
           >
-            <span v-if="processing" class="spinner-border spinner-border-sm me-2"></span>
+            <output v-if="processing" class="spinner-border spinner-border-sm me-2"></output>
             {{ processing ? 'Updating...' : 'Update Response' }}
           </button>
         </div>
@@ -241,7 +241,7 @@
             @click="submitRejection"
             :disabled="processing || !rejectForm.teacher_response.trim()"
           >
-            <span v-if="processing" class="spinner-border spinner-border-sm me-2"></span>
+            <output v-if="processing" class="spinner-border spinner-border-sm me-2"></output>
             {{ processing ? 'Rejecting...' : 'Reject Request' }}
           </button>
         </div>
@@ -253,7 +253,6 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import axiosInstance from '@/config/axios'
-import type { AxiosError } from 'axios'
 
 // Types
 interface EnrollmentRequest {
@@ -339,7 +338,7 @@ const openResponseModal = (request: EnrollmentRequest) => {
   selectedRequest.value = request
   updateForm.teacher_response = request.teacher_response || ''
   
-  const modal = new (window as any).bootstrap.Modal(document.getElementById('updateResponseModal'))
+  const modal = new (globalThis as any).bootstrap.Modal(document.getElementById('updateResponseModal'))
   modal.show()
 }
 
@@ -353,7 +352,7 @@ const submitResponseUpdate = async () => {
       teacher_response: updateForm.teacher_response
     })
     
-    const modal = (window as any).bootstrap.Modal.getInstance(document.getElementById('updateResponseModal'))
+    const modal = (globalThis as any).bootstrap.Modal.getInstance(document.getElementById('updateResponseModal'))
     modal?.hide()
     
     emit('requestUpdated')
@@ -370,7 +369,7 @@ const openRejectModal = (request: EnrollmentRequest) => {
   selectedRequest.value = request
   rejectForm.teacher_response = ''
   
-  const modal = new (window as any).bootstrap.Modal(document.getElementById('rejectModal'))
+  const modal = new (globalThis as any).bootstrap.Modal(document.getElementById('rejectModal'))
   modal.show()
 }
 
@@ -384,7 +383,7 @@ const submitRejection = async () => {
       teacher_response: rejectForm.teacher_response
     })
     
-    const modal = (window as any).bootstrap.Modal.getInstance(document.getElementById('rejectModal'))
+    const modal = (globalThis as any).bootstrap.Modal.getInstance(document.getElementById('rejectModal'))
     modal?.hide()
     
     emit('requestUpdated')

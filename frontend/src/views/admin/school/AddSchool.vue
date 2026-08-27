@@ -17,34 +17,23 @@ import type { SchoolFormData } from '@/models/School'
 import axiosInstance from '@/config/axios'
 import { useToastStore } from '@/store/toast'
 import { formatContactNumberForAPI } from '@/utils/validationConstants'
+import { logContainerDimensions } from '@/utils/debugLayout'
 import { onMounted, onUnmounted, ref } from 'vue'
 
 const router = useRouter()
 const toastStore = useToastStore()
 const isSubmitting = ref(false)
 
-const logDimensions = () => {
-  const container = document.querySelector('.school-form-container')
-  console.log('AddSchool - Window dimensions:', {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    scrollHeight: document.documentElement.scrollHeight,
-    clientHeight: document.documentElement.clientHeight,
-    bodyHeight: document.body.scrollHeight,
-    containerHeight: container?.scrollHeight,
-    hasVerticalScroll: document.documentElement.scrollHeight > window.innerHeight,
-    overflowY: window.getComputedStyle(container as Element).overflowY,
-  })
-}
+const logDimensions = () => logContainerDimensions('.school-form-container', 'AddSchool')
 
 onMounted(() => {
   console.log('AddSchool component mounted - ready to receive submit events')
   logDimensions()
-  window.addEventListener('resize', logDimensions)
+  globalThis.addEventListener('resize', logDimensions)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', logDimensions)
+  globalThis.removeEventListener('resize', logDimensions)
 })
 
 const handleSchoolSubmit = async (schoolData: SchoolFormData) => {

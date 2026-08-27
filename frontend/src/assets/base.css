@@ -118,6 +118,9 @@ body {
     overscroll-behavior: auto !important;
     /* Prevent zoom on double tap */
     touch-action: manipulation !important;
+    /* Override desktop body layout */
+    display: block !important;
+    place-items: unset !important;
   }
 
   #app {
@@ -158,11 +161,6 @@ body {
     transform: translateZ(0);
   }
 
-  /* Override desktop body layout */
-  body {
-    display: block !important;
-    place-items: unset !important;
-  }
 }
 
 /* Update scrollbar styles */

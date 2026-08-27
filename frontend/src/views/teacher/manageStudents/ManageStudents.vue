@@ -30,9 +30,9 @@
                   <hr class="mb-4" />
                   
                   <div v-if="loadingStandards" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
+                    <output class="spinner-border text-primary">
                       <span class="visually-hidden">Loading...</span>
-                    </div>
+                    </output>
                     <p class="mt-3 text-muted mb-0">Loading standards...</p>
                   </div>
                   
@@ -80,9 +80,10 @@
                   <hr class="mb-4" />
                   
                   <div class="row mb-3">
-                    <label class="col-12 col-form-label fw-bold">Standard:</label>
+                    <label class="col-12 col-form-label fw-bold" for="ms-standard-name">Standard:</label>
                     <div class="col-12">
                       <input
+                        id="ms-standard-name"
                         type="text"
                         class="form-control-plaintext"
                         :value="selectedStandard.name"
@@ -110,7 +111,7 @@
                           @click="selectSubject(subject)"
                         >
                           <div class="row mb-2">
-                            <label class="col-12 col-lg-6 col-form-label fw-bold">{{ subject.name }}</label>
+                            <div class="col-12 col-lg-6 col-form-label fw-bold">{{ subject.name }}</div>
                             <div class="col-12 col-lg-6">
                               <div class="d-flex justify-content-lg-end gap-3">
                                 <div class="subject-stat">
@@ -176,9 +177,10 @@
                   <hr class="mb-3" />
                   
                   <div class="row mb-2">
-                    <label class="col-12 col-lg-3 col-form-label fw-bold">Standard:</label>
+                    <label class="col-12 col-lg-3 col-form-label fw-bold" for="ms-detail-standard">Standard:</label>
                     <div class="col-12 col-lg-9">
                       <input
+                        id="ms-detail-standard"
                         type="text"
                         class="form-control-plaintext"
                         :value="selectedStandard.name"
@@ -188,9 +190,10 @@
                   </div>
                   
                   <div class="row mb-2">
-                    <label class="col-12 col-lg-3 col-form-label fw-bold">Academic Year:</label>
+                    <label class="col-12 col-lg-3 col-form-label fw-bold" for="ms-detail-year">Academic Year:</label>
                     <div class="col-12 col-lg-9">
                       <input
+                        id="ms-detail-year"
                         type="text"
                         class="form-control-plaintext"
                         :value="currentAcademicYear"
@@ -202,7 +205,7 @@
                   <div class="row mb-2">
                     <div class="col-12 col-lg-6">
                       <div class="row">
-                        <label class="col-12 col-lg-6 col-form-label fw-bold">Pending:</label>
+                        <div class="col-12 col-lg-6 col-form-label fw-bold">Pending:</div>
                         <div class="col-12 col-lg-6">
                           <span class="form-control-plaintext stat-number pending">{{ subjectStats.pending }}</span>
                         </div>
@@ -210,7 +213,7 @@
                     </div>
                     <div class="col-12 col-lg-6">
                       <div class="row">
-                        <label class="col-12 col-lg-6 col-form-label fw-bold">Active:</label>
+                        <div class="col-12 col-lg-6 col-form-label fw-bold">Active:</div>
                         <div class="col-12 col-lg-6">
                           <span class="form-control-plaintext stat-number active">{{ subjectStats.active }}</span>
                         </div>
@@ -229,7 +232,7 @@
                 <div class="card-body p-3 p-md-4">
                   <div class="row g-2 justify-content-center align-items-center">
                     <div class="col-12">
-                      <div class="btn-group w-100" role="group">
+                      <div class="btn-group w-100">
                         <input 
                           type="radio" 
                           class="btn-check" 
@@ -339,12 +342,9 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import PendingRequestsList from './components/PendingRequestsList.vue'
-import AllRequestsList from './components/AllRequestsList.vue'
 import EnrolledStudentsList from './components/EnrolledStudentsList.vue'
-import ApprovedRequestsList from './components/ApprovedRequestsList.vue'
 import axiosInstance from '@/config/axios'
 import { useAuthStore } from '@/stores/auth'
-import type { AxiosError } from 'axios'
 
 // Get auth store for user ID
 const authStore = useAuthStore()
@@ -542,31 +542,26 @@ const resetToStandardSelection = () => {
   }
 }
 
-const refreshData = async (silent = false) => {
-  if (selectedSubject.value) {
-    await fetchSubjectRequests(silent)
-    // Also refresh the standards and subjects data (but only if not silent)
-    if (!silent) {
-      await fetchTeacherStandardsAndSubjects()
-      // Update the selected standard and subject references
-      if (selectedStandard.value) {
-        const updatedStandard = availableStandards.value.find(s => s.id === selectedStandard.value!.id)
-        if (updatedStandard) {
-          selectedStandard.value = updatedStandard
-          availableSubjects.value = updatedStandard.subjects
-          
-          // Update selected subject reference
-          if (selectedSubject.value) {
-            const updatedSubject = updatedStandard.subjects.find(s => s.id === selectedSubject.value!.id)
-            if (updatedSubject) {
-              selectedSubject.value = updatedSubject
-            }
-          }
-        }
-      }
-      showToast('Success', 'Data refreshed successfully', 'bi-check-circle text-success')
-    }
+const syncSelectedStandardAndSubject = () => {
+  if (!selectedStandard.value) return
+  const updatedStandard = availableStandards.value.find(s => s.id === selectedStandard.value!.id)
+  if (!updatedStandard) return
+  selectedStandard.value = updatedStandard
+  availableSubjects.value = updatedStandard.subjects
+  if (!selectedSubject.value) return
+  const updatedSubject = updatedStandard.subjects.find(s => s.id === selectedSubject.value!.id)
+  if (updatedSubject) {
+    selectedSubject.value = updatedSubject
   }
+}
+
+const refreshData = async (silent = false) => {
+  if (!selectedSubject.value) return
+  await fetchSubjectRequests(silent)
+  if (silent) return
+  await fetchTeacherStandardsAndSubjects()
+  syncSelectedStandardAndSubject()
+  showToast('Success', 'Data refreshed successfully', 'bi-check-circle text-success')
 }
 
 const handleRequestUpdate = async () => {
@@ -582,7 +577,7 @@ const showToast = (title: string, message: string, icon: string) => {
   toastMessage.value = message
   toastIcon.value = icon
   
-  const toast = new (window as any).bootstrap.Toast(document.getElementById('notificationToast'))
+  const toast = new (globalThis as any).bootstrap.Toast(document.getElementById('notificationToast'))
   toast.show()
 }
 
@@ -597,12 +592,13 @@ onMounted(() => {
 .card {
   border-radius: 0.5rem;
   overflow: hidden;
-  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border: none;
 }
 
 .card-body {
   padding: 1.5rem;
+  overflow-y: visible;
 }
 
 .card-header {
@@ -678,18 +674,18 @@ onMounted(() => {
 }
 
 .stat-number {
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: bold;
   line-height: 1;
   margin-bottom: 0.25rem;
 }
 
 .stat-number.pending {
-  color: #fd7e14;
+  color: #ffc107;
 }
 
 .stat-number.active {
-  color: #0d6efd;
+  color: #28a745;
 }
 
 .stat-label {
@@ -707,6 +703,7 @@ onMounted(() => {
 
 .nav-tabs .nav-link {
   border: none;
+  border-bottom: 3px solid transparent;
   color: #6c757d;
   font-weight: 500;
   border-radius: 0.5rem 0.5rem 0 0;
@@ -715,16 +712,17 @@ onMounted(() => {
 }
 
 .nav-tabs .nav-link.active {
-  background-color: #fff;
+  background-color: transparent;
   border: 1px solid #dee2e6;
-  border-bottom: 1px solid #fff;
-  color: #0d6efd;
+  border-bottom-color: #007bff;
+  color: #007bff;
   font-weight: 600;
 }
 
 .nav-tabs .nav-link:hover {
   border-color: transparent;
-  color: #0d6efd;
+  border-bottom-color: #007bff;
+  color: #007bff;
 }
 
 .toast-container {
@@ -745,16 +743,13 @@ onMounted(() => {
   transition: transform 0.2s ease;
 }
 
-/* Custom scrollbar for long lists */
-.card-body {
-  overflow-y: visible;
-}
-
 .selection-container {
   min-height: 400px;
 }
 
 .dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
   animation: fadeIn 0.5s ease-in;
 }
 
@@ -766,6 +761,7 @@ onMounted(() => {
 /* Button styling matching profile page */
 .btn-outline-secondary {
   border-color: #dee2e6;
+  border-width: 2px;
   color: #6c757d;
   transition: all 0.2s ease;
 }
@@ -828,11 +824,6 @@ onMounted(() => {
   }
 }
 
-.dashboard-container {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
 .selection-card {
   transition: all 0.3s ease;
   cursor: pointer;
@@ -871,51 +862,7 @@ onMounted(() => {
   color: #0056b3;
 }
 
-.stat-number {
-  font-weight: bold;
-  font-size: 1rem;
-}
-
-.stat-number.pending {
-  color: #ffc107;
-}
-
-.stat-number.active {
-  color: #28a745;
-}
-
-.bg-gradient {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-}
-
-.nav-tabs .nav-link {
-  border: none;
-  border-bottom: 3px solid transparent;
-  color: #6c757d;
-  font-weight: 500;
-}
-
-.nav-tabs .nav-link.active {
-  background-color: transparent;
-  border-bottom-color: #007bff;
-  color: #007bff;
-}
-
-.nav-tabs .nav-link:hover {
-  border-bottom-color: #007bff;
-  color: #007bff;
-}
-
-.card {
-  border: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
 .btn-outline-primary {
-  border-width: 2px;
-}
-
-.btn-outline-secondary {
   border-width: 2px;
 }
 

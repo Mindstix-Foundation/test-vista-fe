@@ -1,10 +1,13 @@
 <template>
   <div class="form-layout">
+    <AppBreadcrumb />
     <router-view></router-view>
   </div>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import AppBreadcrumb from '@/components/common/AppBreadcrumb.vue'
+</script>
 
 <style scoped>
 .form-layout {

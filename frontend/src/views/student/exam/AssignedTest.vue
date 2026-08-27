@@ -10,6 +10,62 @@
       <hr />
     </div>
 
+    <div v-if="membershipPending" class="row justify-content-center mb-3">
+      <div class="col-12 col-sm-10">
+        <div class="alert alert-warning mb-0">
+          <div class="fw-semibold">Membership pending approval</div>
+          <div class="small">
+            Your school/coaching admin must accept your request before teacher-assigned tests appear here.
+            You can still use self-practice and Smart Tests.
+            <span v-if="pendingOrgName"> Org: <strong>{{ pendingOrgName }}</strong></span>
+          </div>
+          <button
+            class="btn btn-outline-danger btn-sm mt-2"
+            :disabled="membershipBusy"
+            @click="cancelPendingMembership"
+          >
+            Cancel request
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="activeMembership" class="row justify-content-center mb-3">
+      <div class="col-12 col-sm-10">
+        <div class="alert alert-light border mb-0 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+          <div class="small mb-0">
+            Member of <strong>{{ activeMembership.institution?.name }}</strong>
+            <span class="text-muted">({{ activeMembership.institution?.institution_type || 'org' }})</span>
+          </div>
+          <button
+            class="btn btn-outline-danger btn-sm"
+            :disabled="membershipBusy"
+            @click="leaveMembership"
+          >
+            Leave organization
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="notifications.length" class="row justify-content-center mb-3">
+      <div class="col-12 col-sm-10">
+        <div class="alert alert-secondary small mb-0">
+          <div class="d-flex justify-content-between align-items-center gap-2">
+            <span>{{ notifications.length }} unread notification(s)</span>
+            <button class="btn btn-outline-dark btn-sm" :disabled="membershipBusy" @click="markAllNotificationsRead">
+              Mark all read
+            </button>
+          </div>
+          <ul class="mb-0 mt-2">
+            <li v-for="n in notifications.slice(0, 3)" :key="n.id">
+              <strong>{{ n.title }}</strong> — {{ n.message }}
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content -->
     <div class="row gy-2 g-3 justify-content-center mt-2">
       <div class="col-12 col-sm-10">
@@ -18,7 +74,7 @@
           <div class="col-12">
             <div class="filter-controls mb-3">
               <div class="btn-group-container mb-2 mb-md-0">
-                <div class="btn-group" role="group" aria-label="Assigned Test Filter">
+                <div class="btn-group" aria-label="Assigned Test Filter">
                   <button 
                     type="button" 
                     class="btn btn-outline-dark btn-sm btn-md-normal"
@@ -72,25 +128,27 @@
                 >
                   <i class="bi bi-arrow-clockwise me-1"></i>
                   <span class="d-none d-sm-inline">{{ autoRefresh ? 'Live' : 'Refresh' }}</span>
-                  <span v-if="autoRefresh" class="spinner-border spinner-border-sm ms-2" role="status">
+                  <output v-if="autoRefresh" class="spinner-border spinner-border-sm ms-2">
                     <span class="visually-hidden">Loading...</span>
-                  </span>
+                  </output>
                 </button>
               </div>
             </div>
             
             <h6 class="mb-3 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center">
               <span class="mb-1 mb-sm-0">{{ getFilterTitle() }}</span>
-              <span class="badge bg-secondary">{{ filteredTests.length }} found</span>
+              <span class="badge bg-secondary">
+                {{ filteredTests.length }} found
+              </span>
             </h6>
           </div>
         </div>
 
         <!-- Loading State -->
         <div v-if="isLoading" class="text-center py-4 py-md-5">
-          <div class="spinner-border" role="status">
+          <output class="spinner-border">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-3">Loading assigned tests...</p>
         </div>
 
@@ -143,14 +201,11 @@
                   <!-- Progress Section -->
                   <div v-if="test.status === 'active' && test.progress > 0" class="mb-3">
                     <div class="progress mb-2" style="height: 8px;">
-                      <div 
-                        class="progress-bar bg-success" 
-                        role="progressbar" 
-                        :style="`width: ${test.progress}%`"
-                        :aria-valuenow="test.progress"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                      ></div>
+                      <progress
+                        class="assigned-test-progress"
+                        :value="test.progress"
+                        max="100"
+                      ></progress>
                     </div>
                     <p class="small text-muted mb-0">Progress: {{ test.progress }}% completed</p>
                     <p v-if="test.remainingTime && test.remainingTime !== '0:00'" class="small text-muted mb-0">
@@ -226,8 +281,16 @@
         <!-- Empty State -->
         <div v-else class="empty-state">
           <i class="bi bi-journal-x display-1 text-muted"></i>
-          <h5 class="mt-3 text-muted">No {{ activeFilter === 'all' ? '' : activeFilter }} tests found</h5>
-          <p class="text-muted">Check back later for new assignments.</p>
+          <h5 class="mt-3 text-muted">
+            {{ membershipPending ? 'No teacher-assigned tests yet' : `No ${activeFilter === 'all' ? '' : activeFilter} tests found` }}
+          </h5>
+          <p class="text-muted">
+            {{
+              membershipPending
+                ? 'Assigned tests will appear here after your admin approves your membership.'
+                : 'Check back later for new assignments.'
+            }}
+          </p>
         </div>
       </div>
     </div>
@@ -248,6 +311,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ToastNotification from '@/components/common/ToastNotification.vue'
 import testAssignmentService, { type StudentAssignedTest } from '@/services/testAssignmentService'
+import axiosInstance from '@/config/axios'
 
 // Define component name (for linter)
 defineOptions({
@@ -260,6 +324,11 @@ const router = useRouter()
 const activeFilter = ref('all')
 const isLoading = ref(false)
 const assignedTests = ref<StudentAssignedTest[]>([])
+const membershipPending = ref(false)
+const pendingOrgName = ref('')
+const activeMembership = ref<any>(null)
+const membershipBusy = ref(false)
+const notifications = ref<any[]>([])
 
 // Toast notification state
 const showToast = ref(false)
@@ -270,6 +339,94 @@ const toastType = ref('success')
 // Auto-refresh state
 const autoRefresh = ref(true)
 const refreshInterval = ref<number | null>(null)
+
+const loadNotifications = async () => {
+  try {
+    const { data } = await axiosInstance.get('/notifications/me', { params: { unread_only: true } })
+    notifications.value = data || []
+  } catch {
+    notifications.value = []
+  }
+}
+
+const markAllNotificationsRead = async () => {
+  membershipBusy.value = true
+  try {
+    await axiosInstance.put('/notifications/me/read-all')
+    notifications.value = []
+  } catch {
+    /* ignore */
+  } finally {
+    membershipBusy.value = false
+  }
+}
+
+const loadMembershipStatus = async () => {
+  try {
+    const [{ data: profile }, { data: membership }] = await Promise.all([
+      axiosInstance.get('/iti-mocktest/profile'),
+      axiosInstance.get('/institutions/me/learner-membership'),
+    ])
+    const student = profile?.data?.student
+    activeMembership.value = null
+    membershipPending.value = false
+    pendingOrgName.value = ''
+
+    if (membership?.status === 'pending') {
+      membershipPending.value = true
+      pendingOrgName.value = membership.institution?.name || student?.institution?.name || ''
+    } else if (membership?.status === 'active') {
+      activeMembership.value = membership
+    } else {
+      membershipPending.value = !!student?.membership_pending || student?.status === 'pending'
+      pendingOrgName.value = student?.institution?.name || ''
+    }
+  } catch {
+    membershipPending.value = false
+    activeMembership.value = null
+  }
+  await loadNotifications()
+}
+
+const cancelPendingMembership = async () => {
+  if (!confirm('Cancel your pending join request?')) return
+  membershipBusy.value = true
+  try {
+    await axiosInstance.delete('/institutions/me/pending-learner-request')
+    toastTitle.value = 'Cancelled'
+    toastMessage.value = 'Your join request was cancelled.'
+    toastType.value = 'success'
+    showToast.value = true
+    await loadMembershipStatus()
+  } catch (e: any) {
+    toastTitle.value = 'Error'
+    toastMessage.value = e?.response?.data?.message || 'Cancel failed'
+    toastType.value = 'error'
+    showToast.value = true
+  } finally {
+    membershipBusy.value = false
+  }
+}
+
+const leaveMembership = async () => {
+  if (!confirm('Leave this organization? Teacher-assigned tests will stop; self-practice stays.')) return
+  membershipBusy.value = true
+  try {
+    await axiosInstance.delete('/institutions/me/learner-membership')
+    toastTitle.value = 'Left organization'
+    toastMessage.value = 'You left the organization successfully.'
+    toastType.value = 'success'
+    showToast.value = true
+    await loadMembershipStatus()
+  } catch (e: any) {
+    toastTitle.value = 'Error'
+    toastMessage.value = e?.response?.data?.message || 'Leave failed'
+    toastType.value = 'error'
+    showToast.value = true
+  } finally {
+    membershipBusy.value = false
+  }
+}
 
 // Computed properties
 const filteredTests = computed(() => {
@@ -375,6 +532,7 @@ const formatRemainingTime = (remainingTime: string) => {
 
 // Lifecycle
 onMounted(() => {
+  loadMembershipStatus()
   fetchAssignedTests()
   
   // Start auto-refresh by default
@@ -517,6 +675,32 @@ onUnmounted(() => {
   border-radius: 10px;
   background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
   transition: width 0.6s ease;
+}
+
+.assigned-test-progress {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 10px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.assigned-test-progress::-webkit-progress-bar {
+  background-color: transparent;
+  border-radius: 10px;
+}
+
+.assigned-test-progress::-webkit-progress-value {
+  background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+  border-radius: 10px;
+}
+
+.assigned-test-progress::-moz-progress-bar {
+  background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+  border-radius: 10px;
 }
 
 /* Action buttons styling */

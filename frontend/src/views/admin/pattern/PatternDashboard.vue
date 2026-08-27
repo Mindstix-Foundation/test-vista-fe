@@ -4,23 +4,239 @@
     <div class="row p-2 g-2 mb-1">
       <div class="row justify-content-center align-items-center g-2 mb-4">
         <div class="col-12 col-sm-5">
-          <h5 class="text-left m-0 fw-bolder text-uppercase">PATTERN MANAGEMENT</h5>
+          <h5 class="text-left m-0 fw-bolder text-uppercase">Pattern Management</h5>
+          <p v-if="patternScope === 'exam' && examProgramLabel" class="text-muted small mb-0 mt-1">
+            {{ examProgramLabel }}
+          </p>
         </div>
         <div class="col-12 col-sm-5 dynamic-style text-end">
           <router-link
+            v-if="canAddPattern"
             class="btn btn-success stick-bottom"
             id="addButton"
-            :to="{ name: 'createPattern' }"
+            :to="addPatternLink"
           >
             Add Pattern
           </router-link>
+          <button v-else class="btn btn-success stick-bottom" type="button" disabled>
+            Add Pattern
+          </button>
         </div>
       </div>
       <hr />
     </div>
 
+    <!-- Scope: school board vs competitive/entrance -->
+    <div class="row p-2 justify-content-center mb-3">
+      <div class="col-12 col-sm-10 col-md-10">
+        <ul class="nav nav-tabs category-tabs">
+          <li class="nav-item">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: patternScope === 'board' }"
+              @click="setPatternScope('board')"
+            >
+              School Board
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: patternScope === 'exam' }"
+              @click="setPatternScope('exam')"
+            >
+              Competitive / Entrance
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Exam patterns -->
+    <template v-if="patternScope === 'exam'">
+      <div class="row p-2 justify-content-center mb-3">
+        <div class="col-12 col-sm-10 col-md-10">
+          <div class="row g-2">
+            <div class="col-12 col-md-6">
+              <SearchableDropdown
+                id="filterExamProgram"
+                label="Exam"
+                placeholder="Search for exam (UPSC, JEE, NEET...)"
+                :items="examPrograms"
+                v-model="selectedExamProgram"
+                :search-keys="['name', 'label']"
+                label-key="label"
+                required
+                @change="handleExamProgramChange"
+              >
+                <template #label>Exam Program <span class="text-danger">*</span></template>
+                <template #item="{ item }">{{ item.label }}</template>
+              </SearchableDropdown>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="position-relative">
+                <SearchableDropdown
+                  id="filterExamStage"
+                  label="Stage"
+                  :placeholder="stagePlaceholder"
+                  :items="examStages"
+                  v-model="selectedExamStage"
+                  :search-keys="['name']"
+                  label-key="name"
+                  :disabled="!selectedExamProgram || loadingExamStages || examStages.length === 0"
+                  :required="!!selectedExamProgram && examStages.length > 0"
+                  @change="handleExamStageChange"
+                >
+                  <template #label>
+                    Stage <span v-if="selectedExamProgram && examStages.length" class="text-danger">*</span>
+                  </template>
+                </SearchableDropdown>
+                <div v-if="loadingExamStages" class="dropdown-loading-overlay">
+                  <output class="spinner-border spinner-border-sm text-primary">
+                    <span class="visually-hidden">Loading stages...</span>
+                  </output>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row p-2 g-4 justify-content-center mb-5">
+        <div v-if="!canLoadExamPatterns" class="col-12 col-sm-10 text-center">
+          <div class="card">
+            <div class="card-body py-5 text-muted">
+              <i class="bi bi-ui-checks-grid fs-1 d-block mb-3"></i>
+              <p class="mb-0">{{ examPatternsPlaceholder }}</p>
+            </div>
+          </div>
+        </div>
+
+        <template v-else>
+          <div
+            v-if="loadingExamTemplates && examTemplates.length === 0"
+            class="col-12 col-sm-10 text-center py-5"
+          >
+            <output class="spinner-border text-primary">
+              <span class="visually-hidden">Loading patterns...</span>
+            </output>
+          </div>
+
+          <div
+            v-else-if="!loadingExamTemplates && examTemplates.length === 0"
+            class="col-12 col-sm-10 text-center"
+          >
+            <div class="card">
+              <div class="card-body py-5">
+                <i class="bi bi-clipboard2-x fs-1 text-secondary mb-3"></i>
+                <h5 class="text-secondary mb-0">No paper patterns yet</h5>
+                <p class="text-muted small mt-2 mb-0">Click <strong>Add Pattern</strong> to create one.</p>
+              </div>
+            </div>
+          </div>
+
+          <template v-else>
+            <div
+              v-for="tpl in examTemplates"
+              :key="tpl.id"
+              class="col-12 col-sm-10"
+              :class="{ 'exam-pattern-loading': loadingExamTemplates }"
+            >
+              <div class="card">
+                <div class="card-body">
+                  <div class="container p-0">
+                    <div class="row mb-2 justify-content-end">
+                      <div class="col-12 col-sm-auto text-end">
+                        <router-link
+                          :to="editExamPatternLink(tpl)"
+                          class="text-decoration-none text-black me-2 ms-3 fs-4"
+                        >
+                          <i class="bi bi-pencil-square"></i>
+                        </router-link>
+                        <i
+                          class="bi bi-trash3 ms-3 fs-4"
+                          @click="showDeleteExamTemplateConfirmation(tpl)"
+                          style="cursor: pointer"
+                        ></i>
+                      </div>
+                    </div>
+
+                    <div class="row mb-2 justify-content-between">
+                      <div class="col-12 col-sm-6">
+                        <strong class="text-uppercase fs-5">{{ tpl.name }}</strong>
+                      </div>
+                      <div class="col-12 col-sm-6">
+                        <strong>Marks:</strong>
+                        <span class="me-2">{{ tpl.total_marks }}</span>
+                      </div>
+                    </div>
+
+                    <div class="row mb-3">
+                      <span>{{ examProgramLabel }}</span>
+                    </div>
+
+                    <div class="row">
+                      <div class="col-12 col-sm-4">
+                        <strong>Questions:</strong>
+                        <span>{{ tpl.total_questions ?? '—' }}</span>
+                      </div>
+                      <div class="col-12 col-sm-4">
+                        <strong>Duration:</strong>
+                        <span>{{ tpl.duration_minutes ?? '—' }} min</span>
+                      </div>
+                      <div class="col-12 col-sm-3">
+                        <strong>Stage:</strong>
+                        <span>{{ tpl.exam_stage?.name ?? selectedExamStage?.name ?? 'All stages' }}</span>
+                      </div>
+                      <div class="col-12 col-sm-1 text-end">
+                        <button
+                          class="btn chevron-btn"
+                          type="button"
+                          @click="toggleExamTemplate(tpl.id)"
+                          :title="expandedExamTemplateIds.has(tpl.id) ? 'Hide details' : 'Show details'"
+                        >
+                          <i
+                            class="bi bi-chevron-double-down fs-4"
+                            :class="{ 'chevron-rotated': expandedExamTemplateIds.has(tpl.id) }"
+                          ></i>
+                        </button>
+                      </div>
+                    </div>
+
+                    <transition name="slide-fade">
+                      <div v-if="expandedExamTemplateIds.has(tpl.id)" class="row mt-3 pattern-details">
+                        <table class="table table-sm table-striped table-bordered">
+                          <caption>Pattern section details</caption>
+                          <tbody>
+                            <tr class="table-dark">
+                              <th><strong>Section Name</strong></th>
+                              <th><strong>Question Type</strong></th>
+                              <th><strong>Number of Questions</strong></th>
+                              <th><strong>Total Marks Allotted</strong></th>
+                            </tr>
+                            <tr v-for="section in tpl.sections" :key="section.id">
+                              <td>{{ section.name }}</td>
+                              <td>{{ examSectionTypeLabel(section) }}</td>
+                              <td>{{ section.total_questions }}</td>
+                              <td>{{ section.mandatory_questions * section.marks_per_question }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </transition>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+      </div>
+    </template>
+
     <!-- Search and Filter Section -->
-    <div class="row p-2 justify-content-center mb-2">
+    <div v-if="patternScope === 'board'" class="row p-2 justify-content-center mb-2">
       <div class="col-12 col-sm-10 col-md-10">
         <!-- Search, Sort and Filter in One Row -->
         <div class="d-flex gap-2 mb-2">
@@ -141,7 +357,7 @@
     </div>
 
     <!-- Pattern Cards -->
-    <div class="row p-2 g-4 justify-content-center mb-5">
+    <div v-if="patternScope === 'board'" class="row p-2 g-4 justify-content-center mb-5">
       <!-- No Patterns Message -->
       <div v-if="!loading && !isSearching && patterns.length === 0" class="col col-12 col-sm-10 text-center">
         <div class="card">
@@ -342,6 +558,33 @@
         </div>
       </div>
     </div>
+    <!-- Delete Exam Template Confirmation Modal -->
+    <div
+      class="modal fade"
+      id="deleteExamTemplateModal"
+      tabindex="-1"
+      aria-labelledby="deleteExamTemplateModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title" id="deleteExamTemplateModalLabel">Remove Paper Pattern</h5>
+          </div>
+          <div class="modal-body">
+            Are you sure you want to delete this paper pattern from the system?
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light" style="border: 1px solid gray" data-bs-dismiss="modal">
+              Cancel
+            </button>
+            <button type="button" class="btn btn-danger" @click="deleteExamTemplate" data-bs-dismiss="modal">
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -350,7 +593,278 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { Modal, Collapse } from 'bootstrap'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
 import axiosInstance from '@/config/axios'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { examCatalogService } from '@/services/examCatalogService'
+import { answerFormatToTypeName } from '@/utils/examPatternSection'
+import { useToastStore } from '@/store/toast'
+import type { ExamProgram, ExamStage, PaperTemplate } from '@/types/exam'
+
+const route = useRoute()
+const router = useRouter()
+const toastStore = useToastStore()
+
+const patternScope = ref<'board' | 'exam'>('board')
+const examPrograms = ref<Array<ExamProgram & { label: string }>>([])
+const selectedExamProgram = ref<(ExamProgram & { label: string }) | null>(null)
+const examStages = ref<ExamStage[]>([])
+const selectedExamStage = ref<ExamStage | null>(null)
+const loadingExamStages = ref(false)
+
+const examProgramId = computed(() => {
+  const id = route.query.examProgramId
+  return id ? Number(id) : null
+})
+
+const canLoadExamPatterns = computed(() => {
+  if (!selectedExamProgram.value || loadingExamStages.value) return false
+  if (examStages.value.length > 0 && !selectedExamStage.value) return false
+  return true
+})
+
+const examPatternsPlaceholder = computed(() => {
+  if (!selectedExamProgram.value) {
+    return 'Select exam and stage to view patterns.'
+  }
+  if (loadingExamStages.value) {
+    return 'Loading stages...'
+  }
+  if (examStages.value.length > 0 && !selectedExamStage.value) {
+    return 'Select a stage to view patterns.'
+  }
+  return 'Select exam and stage to view patterns.'
+})
+
+const stagePlaceholder = computed(() => {
+  if (!selectedExamProgram.value) return 'Select exam first'
+  if (loadingExamStages.value) return 'Loading stages...'
+  if (examStages.value.length === 0) return 'No stages for this exam'
+  return 'Select exam stage'
+})
+
+const canAddPattern = computed(
+  () => patternScope.value === 'board' || (patternScope.value === 'exam' && canLoadExamPatterns.value),
+)
+
+const addPatternLink = computed(() => {
+  if (patternScope.value === 'exam' && canLoadExamPatterns.value && selectedExamProgram.value) {
+    return {
+      name: 'createExamPattern',
+      query: {
+        scope: 'exam',
+        examProgramId: String(selectedExamProgram.value.id),
+        ...(selectedExamStage.value
+          ? { examStageId: String(selectedExamStage.value.id) }
+          : {}),
+      },
+    }
+  }
+  return { name: 'createPattern' }
+})
+const examProgramLabel = ref('')
+const examTemplates = ref<PaperTemplate[]>([])
+const loadingExamTemplates = ref(false)
+const expandedExamTemplateIds = ref<Set<number>>(new Set())
+const selectedExamTemplateForDelete = ref<PaperTemplate | null>(null)
+
+const editExamPatternLink = (tpl: PaperTemplate) => ({
+  name: 'editExamPattern',
+  params: { id: String(tpl.id) },
+  query: {
+    examProgramId: String(selectedExamProgram.value?.id ?? tpl.exam_program_id),
+    ...(selectedExamStage.value || tpl.exam_stage_id
+      ? { examStageId: String(selectedExamStage.value?.id ?? tpl.exam_stage_id) }
+      : {}),
+  },
+})
+
+function examSectionTypeLabel(section: PaperTemplate['sections'][number]): string {
+  const linked = (
+    section.question_types
+      ?.map((qt) => qt.question_type?.type_name)
+      .filter(Boolean) ?? []
+  ) as string[]
+  if (linked.length > 0) return linked.join(', ')
+  return answerFormatToTypeName(section.answer_format)
+}
+
+const showDeleteExamTemplateConfirmation = (tpl: PaperTemplate) => {
+  selectedExamTemplateForDelete.value = tpl
+  const modal = new Modal(document.getElementById('deleteExamTemplateModal')!)
+  modal.show()
+}
+
+const deleteExamTemplate = async () => {
+  if (!selectedExamTemplateForDelete.value) return
+  try {
+    await examCatalogService.deleteTemplate(selectedExamTemplateForDelete.value.id)
+    toastStore.showToast({
+      title: 'Success',
+      message: 'Paper pattern deleted successfully',
+      type: 'success',
+    })
+    await loadExamTemplates()
+  } catch (error: any) {
+    toastStore.showToast({
+      title: 'Error',
+      message: error?.response?.data?.message ?? 'Failed to delete paper pattern',
+      type: 'error',
+    })
+  } finally {
+    selectedExamTemplateForDelete.value = null
+  }
+}
+
+function toggleExamTemplate(templateId: number) {
+  const next = new Set(expandedExamTemplateIds.value)
+  if (next.has(templateId)) next.delete(templateId)
+  else next.add(templateId)
+  expandedExamTemplateIds.value = next
+}
+
+async function loadExamPrograms() {
+  try {
+    const [entrance, competitive] = await Promise.all([
+      examCatalogService.getPrograms({ category: 'ENTRANCE' }),
+      examCatalogService.getPrograms({ category: 'COMPETITIVE' }),
+    ])
+    examPrograms.value = [...entrance, ...competitive].map((program) => ({
+      ...program,
+      label: `${program.exam_body?.abbreviation ?? ''} — ${program.name}`.trim(),
+    }))
+  } catch (error) {
+    console.error('Error loading exam programs:', error)
+    examPrograms.value = []
+  }
+}
+
+async function handleExamProgramChange() {
+  selectedExamStage.value = null
+  examStages.value = []
+  expandedExamTemplateIds.value = new Set()
+  examProgramLabel.value = selectedExamProgram.value?.label ?? ''
+
+  if (!selectedExamProgram.value) {
+    examTemplates.value = []
+    syncExamRouteQuery()
+    return
+  }
+
+  loadingExamStages.value = true
+  try {
+    examStages.value = await examCatalogService.getStages(selectedExamProgram.value.id)
+    if (examStages.value.length === 1) {
+      selectedExamStage.value = examStages.value[0]
+    }
+  } catch (error) {
+    console.error('Error loading exam stages:', error)
+    examStages.value = []
+  } finally {
+    loadingExamStages.value = false
+  }
+
+  await refreshExamPatterns()
+  syncExamRouteQuery()
+}
+
+async function handleExamStageChange() {
+  await refreshExamPatterns()
+  syncExamRouteQuery()
+}
+
+async function refreshExamPatterns() {
+  if (patternScope.value !== 'exam') return
+  if (!canLoadExamPatterns.value) {
+    if (!loadingExamStages.value) {
+      examTemplates.value = []
+    }
+    return
+  }
+  await loadExamTemplates()
+}
+
+function syncExamRouteQuery() {
+  if (patternScope.value !== 'exam') return
+
+  const params = new URLSearchParams()
+  params.set('scope', 'exam')
+  if (selectedExamProgram.value) {
+    params.set('examProgramId', String(selectedExamProgram.value.id))
+    if (selectedExamStage.value) {
+      params.set('examStageId', String(selectedExamStage.value.id))
+    }
+  }
+
+  const nextSearch = params.toString()
+  const currentSearch = globalThis.location.search.replace(/^\?/, '')
+  if (nextSearch === currentSearch) return
+
+  const nextUrl = `${globalThis.location.pathname}?${nextSearch}`
+  globalThis.history.replaceState(globalThis.history.state, '', nextUrl)
+}
+
+async function preselectExamFromQuery() {
+  if (!examProgramId.value) return
+  const match = examPrograms.value.find((p) => p.id === examProgramId.value)
+  if (!match) return
+
+  selectedExamProgram.value = match
+  examProgramLabel.value = match.label
+  loadingExamStages.value = true
+  try {
+    examStages.value = await examCatalogService.getStages(match.id)
+  } catch (error) {
+    console.error('Error loading exam stages:', error)
+    examStages.value = []
+  } finally {
+    loadingExamStages.value = false
+  }
+
+  const stageId = route.query.examStageId
+  if (stageId && examStages.value.length) {
+    selectedExamStage.value =
+      examStages.value.find((s) => String(s.id) === String(stageId)) ?? null
+  } else if (examStages.value.length === 1) {
+    selectedExamStage.value = examStages.value[0]
+  }
+
+  await refreshExamPatterns()
+}
+
+function setPatternScope(scope: 'board' | 'exam') {
+  patternScope.value = scope
+  if (scope === 'board') {
+    router.replace({ name: 'patternDashboard' })
+    if (!boards.value.length) fetchBoards()
+    fetchPatterns()
+    return
+  }
+  router.replace({ name: 'patternDashboard', query: { scope: 'exam' } })
+}
+
+async function loadExamTemplates() {
+  if (!canLoadExamPatterns.value || !selectedExamProgram.value) return
+  loadingExamTemplates.value = true
+  try {
+    const programId = selectedExamProgram.value.id
+    const stageId = selectedExamStage.value?.id
+    const [program, allTemplates] = await Promise.all([
+      examCatalogService.getProgram(programId),
+      examCatalogService.filterTemplates({ exam_program_id: programId }),
+    ])
+    examProgramLabel.value = `${program.exam_body?.abbreviation ?? ''} — ${program.name}`.trim()
+    examTemplates.value = stageId
+      ? allTemplates.filter(
+          (t) => !t.exam_stage_id || t.exam_stage_id === stageId,
+        )
+      : allTemplates
+    expandedExamTemplateIds.value = new Set()
+  } catch (error) {
+    console.error('Error loading exam templates:', error)
+    examTemplates.value = []
+  } finally {
+    loadingExamTemplates.value = false
+  }
+}
 
 interface Board {
   id: number
@@ -874,14 +1388,21 @@ function handleSortChange() {
 }
 
 // Lifecycle hooks
-onMounted(() => {
-  // Initialize from route query if present
-  const route = useRoute()
-  
+onMounted(async () => {
+  await loadExamPrograms()
+
+  if (route.query.scope === 'exam' || examProgramId.value) {
+    patternScope.value = 'exam'
+    if (examProgramId.value) {
+      await preselectExamFromQuery()
+    }
+    return
+  }
+
   initializeSortFromRoute(route)
   initializePageFromRoute(route)
   initializeFilterState()
-  
+
   fetchBoards()
   fetchPatterns()
 })
@@ -903,8 +1424,8 @@ const initializeSortFromRoute = (route: any) => {
 const initializePageFromRoute = (route: any) => {
   if (!route.query.page) return
   
-  const page = parseInt(route.query.page as string)
-  if (!isNaN(page) && page > 0) {
+  const page = Number.parseInt(route.query.page as string, 10)
+  if (!Number.isNaN(page) && page > 0) {
     currentPage.value = page
   }
 }
@@ -985,6 +1506,37 @@ watch([selectedBoard, selectedStandard, selectedSubject, totalMarks], async () =
 </script>
 
 <style scoped>
+.category-tabs {
+  border-bottom: 2px solid #dee2e6;
+}
+
+.category-tabs .nav-link {
+  color: #495057;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  background: transparent;
+}
+
+.category-tabs .nav-link:hover {
+  color: #212529;
+  border-bottom-color: #adb5bd;
+}
+
+.category-tabs .nav-link.active {
+  color: #212529;
+  font-weight: 600;
+  border-bottom-color: #212529;
+  background: transparent;
+}
+
+.exam-pattern-loading {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
 /* Styles for screens below 576px */
 @media (max-width: 576px) {
   .dynamic-style {

@@ -549,9 +549,9 @@ function handleImageChange(event: Event) {
 onMounted(() => {
   // Initialize textareas
   setTimeout(() => {
-    document.querySelectorAll('textarea').forEach(textarea => {
+    for (const textarea of document.querySelectorAll('textarea')) {
       autoResize({ target: textarea } as unknown as Event)
-    })
+    }
   }, 0)
 })
 </script>

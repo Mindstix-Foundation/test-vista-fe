@@ -1,9 +1,9 @@
 <template>
   <div>
     <div v-if="loading" class="text-center py-4">
-      <div class="spinner-border text-primary" role="status">
+      <output class="spinner-border text-primary">
         <span class="visually-hidden">Loading...</span>
-      </div>
+      </output>
       <p class="mt-2 text-muted">Loading all requests...</p>
     </div>
 
@@ -414,7 +414,7 @@
             @click="removeStudent"
             :disabled="removing"
           >
-            <span v-if="removing" class="spinner-border spinner-border-sm me-2"></span>
+            <output v-if="removing" class="spinner-border spinner-border-sm me-2"></output>
             {{ removing ? 'Removing...' : 'Remove Student' }}
           </button>
         </div>
@@ -510,8 +510,8 @@ const filteredRequests = computed(() => {
         bValue = b.student.user.name.toLowerCase()
         break
       case 'roll_no':
-        aValue = parseInt(a.student.student_id || '0')
-        bValue = parseInt(b.student.student_id || '0')
+        aValue = Number.parseInt(a.student.student_id || '0')
+        bValue = Number.parseInt(b.student.student_id || '0')
         break
       case 'subject_name':
         aValue = a.teacher_subject.subject.name.toLowerCase()
@@ -660,14 +660,14 @@ const updateRequestStatus = async (request: EnrollmentRequest, status: string) =
 
 const viewRequestDetails = (request: EnrollmentRequest) => {
   selectedRequest.value = request
-  const modal = new (window as any).bootstrap.Modal(document.getElementById('detailsModal'))
+  const modal = new (globalThis as any).bootstrap.Modal(document.getElementById('detailsModal'))
   modal.show()
 }
 
 const openRejectModal = (request: EnrollmentRequest) => {
   selectedRequest.value = request
   rejectReason.value = ''
-  const modal = new (window as any).bootstrap.Modal(document.getElementById('rejectModal'))
+  const modal = new (globalThis as any).bootstrap.Modal(document.getElementById('rejectModal'))
   modal.show()
 }
 
@@ -682,7 +682,7 @@ const submitReject = async () => {
       teacher_response: rejectReason.value
     })
     
-    const modal = (window as any).bootstrap.Modal.getInstance(document.getElementById('rejectModal'))
+    const modal = (globalThis as any).bootstrap.Modal.getInstance(document.getElementById('rejectModal'))
     modal.hide()
     
     emit('request-updated')
@@ -704,7 +704,7 @@ const confirmRemoveStudent = (request: EnrollmentRequest) => {
   if (modalElement) {
     // Try to use Bootstrap's Modal class
     try {
-      const modal = new (window as any).bootstrap.Modal(modalElement)
+      const modal = new (globalThis as any).bootstrap.Modal(modalElement)
       modal.show()
     } catch (error) {
       console.error('Bootstrap Modal error:', error)
@@ -737,7 +737,7 @@ const removeStudent = async () => {
     const modalElement = document.getElementById('removeRequestStudentModal')
     if (modalElement) {
       try {
-        const modal = (window as any).bootstrap.Modal.getInstance(modalElement)
+        const modal = (globalThis as any).bootstrap.Modal.getInstance(modalElement)
         if (modal) {
           modal.hide()
         } else {

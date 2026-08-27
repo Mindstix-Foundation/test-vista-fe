@@ -47,6 +47,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from '@/store/toast'
 import ChapterFormComponent from '@/components/forms/ChapterFormComponent.vue'
 import axiosInstance from '@/config/axios'
+import { boardSyllabusQueryString } from '@/utils/boardSyllabus'
 
 interface Board {
   id: number
@@ -106,6 +107,18 @@ const fetchData = async () => {
     // Fetch subject details
     const subjectResponse = await axiosInstance.get(`/subjects/${route.query.subject}`)
     selectedSubject.value = subjectResponse.data
+    router.replace({
+      query: boardSyllabusQueryString({
+        board: selectedBoard.value?.id,
+        medium: selectedMedium.value?.id,
+        standard: selectedStandard.value?.id,
+        subject: selectedSubject.value?.id,
+        boardName: selectedBoard.value?.name,
+        mediumName: selectedMedium.value?.instruction_medium,
+        standardName: selectedStandard.value?.name,
+        subjectName: selectedSubject.value?.name,
+      }),
+    })
   } catch (error) {
     console.error('Error fetching data:', error)
     toastStore.showToast({
@@ -179,7 +192,9 @@ const saveChapter = async (formData: { chapterName: string; topics: string[] }) 
     console.log('API response after creating chapter:', savedChapter)
 
     // Check if the API returned a different sequential chapter number
-    if (savedChapter.sequential_chapter_number !== nextChapterNumber) {
+    if (savedChapter.sequential_chapter_number === nextChapterNumber) {
+      console.log('API respected our sequential chapter number:', nextChapterNumber);
+    } else {
       console.warn('WARNING: API returned a different sequential chapter number than what was sent!');
       console.warn(`Sent: ${nextChapterNumber}, Received: ${savedChapter.sequential_chapter_number}`);
       console.warn('This suggests the backend API is overriding the sequential number we sent.');
@@ -190,8 +205,6 @@ const saveChapter = async (formData: { chapterName: string; topics: string[] }) 
         message: 'The chapter was created but with an unexpected chapter number. Please contact the development team.',
         type: 'warning',
       });
-    } else {
-      console.log('API respected our sequential chapter number:', nextChapterNumber);
     }
 
     // Save topics with sequential numbers
@@ -217,11 +230,16 @@ const saveChapter = async (formData: { chapterName: string; topics: string[] }) 
     router.push({
       name: 'subjectSyllabus',
       params: { id: route.query.subject as string },
-      query: {
-        board: route.query.board,
-        medium: route.query.medium,
-        standard: route.query.standard,
-      },
+      query: boardSyllabusQueryString({
+        board: selectedBoard.value?.id,
+        medium: selectedMedium.value?.id,
+        standard: selectedStandard.value?.id,
+        subject: selectedSubject.value?.id,
+        boardName: selectedBoard.value?.name,
+        mediumName: selectedMedium.value?.instruction_medium,
+        standardName: selectedStandard.value?.name,
+        subjectName: selectedSubject.value?.name,
+      }),
     })
 
     // After creating the chapter, check again to see what chapters exist

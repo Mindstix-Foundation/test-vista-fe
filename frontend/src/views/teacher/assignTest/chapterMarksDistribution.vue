@@ -37,9 +37,9 @@
             <h6 class="fw-semibold mb-3">Chapter Marks Distribution</h6>
 
             <div v-if="isLoadingPattern" class="text-center py-3">
-              <div class="spinner-border spinner-border-sm" role="status">
+              <output class="spinner-border spinner-border-sm">
                 <span class="visually-hidden">Loading pattern...</span>
-              </div>
+              </output>
               <p class="mt-2 text-muted">Loading pattern data...</p>
             </div>
             
@@ -58,7 +58,7 @@
                       :title="!isPerfectlyBalanced ? 'Generate is only available when marks are perfectly balanced (Total = Assigned)' : 'Generate optimized marks distribution'"
                     >
                       <i class="bi bi-magic me-1"></i>
-                      <span v-if="isGeneratingMarks" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                      <output v-if="isGeneratingMarks" class="spinner-border spinner-border-sm me-1"></output>
                       Generate
                     </button>
                     <button 
@@ -67,7 +67,7 @@
                       @click="generateEquallyMarksDistribution"
                       :disabled="isGeneratingEqually || isGeneratingMarks || chapterMarksData.length === 0"
                     >
-                      <span v-if="isGeneratingEqually" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                      <output v-if="isGeneratingEqually" class="spinner-border spinner-border-sm me-1"></output>
                       <i v-else class="bi bi-distribute-horizontal me-1"></i>
                       Generate Equally
                     </button>
@@ -180,10 +180,10 @@
                   <table class="table table-bordered table-sm">
                     <thead class="table-dark">
                       <tr>
-                        <th>Section</th>
-                        <th>Questions Required</th>
-                        <th>Total Available</th>
-                        <th>Marks per Question</th>
+                        <th scope="col">Section</th>
+                        <th scope="col">Questions Required</th>
+                        <th scope="col">Total Available</th>
+                        <th scope="col">Marks per Question</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -200,8 +200,8 @@
                     </tbody>
                     <tfoot class="table-light">
                       <tr>
-                        <th colspan="3" class="text-end">Total Marks:</th>
-                        <th class="text-center">{{ totalPatternMarks }}</th>
+                        <th scope="row" colspan="3" class="text-end">Total Marks:</th>
+                        <th scope="row" class="text-center">{{ totalPatternMarks }}</th>
                       </tr>
                     </tfoot>
                   </table>
@@ -226,9 +226,9 @@
               :disabled="!canPreviewTestPaper || isGeneratingMarks || isGeneratingEqually"
               :title="(isGeneratingMarks || isGeneratingEqually) ? 'Generating questions distribution...' : (!latestAllocationData ? 'Please click Generate or Generate Equally first' : (hasManualChanges ? 'Please click Generate or Generate Equally to apply your changes before previewing' : (isFormValid ? 'Preview the test paper' : 'Please complete all required fields')))"
             >
-              <span v-if="isGeneratingMarks || isGeneratingEqually" class="spinner-border spinner-border-sm me-2" role="status">
+              <output v-if="isGeneratingMarks || isGeneratingEqually" class="spinner-border spinner-border-sm me-2">
                 <span class="visually-hidden">Loading...</span>
-              </span>
+              </output>
               <i v-else class="bi bi-eye me-1"></i>
               {{ (isGeneratingMarks || isGeneratingEqually) ? 'Generating Preview...' : 'Preview Test Paper' }}
             </button>
@@ -491,7 +491,7 @@ const initializeChapterMarksData = async () => {
   }
 
   // Use pattern total marks if available, otherwise use the total marks from previous page
-  const totalMarksToUse = totalPatternMarks.value > 0 ? totalPatternMarks.value : parseInt(totalMarksFromPrevious)
+  const totalMarksToUse = totalPatternMarks.value > 0 ? totalPatternMarks.value : Number.parseInt(totalMarksFromPrevious)
   
   if (!totalMarksToUse || totalMarksToUse <= 0) {
     console.error('Invalid total marks:', totalMarksToUse)
@@ -567,7 +567,7 @@ const fetchChapterMarksRanges = async () => {
 
 // Validate that current marks are within range and adjust if needed
 const validateCurrentMarksAgainstRanges = () => {
-  chapterMarksData.value.forEach(chapter => {
+  for (const chapter of chapterMarksData.value) {
     const range = chapterMarksRanges.value.find(r => r.chapterId === chapter.chapterId)
     if (range && !range.possibleMarks.includes(chapter.marks)) {
       console.log(`Chapter ${chapter.chapterId} marks (${chapter.marks}) not in valid range, adjusting...`)
@@ -579,7 +579,7 @@ const validateCurrentMarksAgainstRanges = () => {
       
       chapter.marks = closestMark
     }
-  })
+  }
   updatePercentages()
 }
 
@@ -666,8 +666,6 @@ const incrementMarks = (index: number) => {
   const chapter = chapterMarksData.value[index]
   if (canIncrement(chapter)) {
     const nextValidMark = getNextValidMark(chapter)
-    const marksDifference = nextValidMark - chapter.marks
-    
     // Allow increment even if it exceeds total marks (user can adjust other chapters)
     chapter.marks = nextValidMark
     hasManualChanges.value = true
@@ -694,6 +692,24 @@ const decrementMarks = (index: number) => {
 }
 
 // Generate marks distribution using API
+const applyDistributionResponse = (distributionData: any) => {
+  latestAllocationData.value = distributionData
+  console.log('latestAllocationData set to:', latestAllocationData.value)
+  hasManualChanges.value = false
+
+  if (distributionData?.chapterMarks) {
+    for (const apiChapter of distributionData.chapterMarks) {
+      const localChapter = chapterMarksData.value.find(c => c.chapterId === apiChapter.chapterId)
+      if (localChapter) {
+        localChapter.marks = apiChapter.absoluteMarks
+      }
+    }
+    updatePercentages()
+  }
+
+  showSuccessToast('Marks distribution generated successfully!')
+}
+
 const generateMarksDistribution = async () => {
   if (!patternId) {
     showErrorToast('Pattern ID is missing')
@@ -703,10 +719,9 @@ const generateMarksDistribution = async () => {
   try {
     isGeneratingMarks.value = true
     
-    // Get chapter IDs and requested marks
     const chapterIds = chapterMarksData.value.map(c => c.chapterId)
     const requestedMarks = chapterMarksData.value.map(c => c.marks)
-    const mediumIds = route.query.mediumId ? [parseInt(route.query.mediumId as string)] : [1] // Default to medium 1
+    const mediumIds = route.query.mediumId ? [Number.parseInt(route.query.mediumId as string)] : [1]
 
     const params = new URLSearchParams({
       patternId: patternId,
@@ -718,37 +733,13 @@ const generateMarksDistribution = async () => {
 
     console.log('Calling Generate API:', `/chapter-marks-distribution/distribute?${params}`)
     const response = await axiosInstance.get(`/chapter-marks-distribution/distribute?${params}`)
-    
     console.log('Generate API response:', response.data)
     
     if (response.data?.data) {
-      const distributionData = response.data.data
-      
-      // Store the latest allocation data for preview - CRITICAL FOR ENABLING PREVIEW BUTTON
-      latestAllocationData.value = distributionData
-      console.log('latestAllocationData set to:', latestAllocationData.value)
-      
-      // Reset manual changes flag since we successfully called the API
-      hasManualChanges.value = false
-      
-      // Update chapter marks based on API response
-      if (distributionData.chapterMarks) {
-        distributionData.chapterMarks.forEach((apiChapter: any) => {
-          const localChapter = chapterMarksData.value.find(c => c.chapterId === apiChapter.chapterId)
-          if (localChapter) {
-            localChapter.marks = apiChapter.absoluteMarks
-          }
-        })
-        updatePercentages()
-      }
-      
-      showSuccessToast('Marks distribution generated successfully!')
+      applyDistributionResponse(response.data.data)
     } else if (response.data) {
-      // Handle case where response.data exists but doesn't have nested data property
       console.log('Response data structure different than expected, using response.data directly')
-      latestAllocationData.value = response.data
-      hasManualChanges.value = false
-      showSuccessToast('Marks distribution generated successfully!')
+      applyDistributionResponse(response.data)
     } else {
       console.error('No data in response:', response.data)
       showErrorToast('Failed to generate marks distribution - no data received')
@@ -777,9 +768,9 @@ const generateEquallyMarksDistribution = async () => {
     console.log('Calling Generate Equally API...')
     
     // Get the parameters from the current context
-    const patternIdNum = parseInt(patternId);
+    const patternIdNum = Number.parseInt(patternId);
     const chapterIds = chapterMarksData.value.map(chapter => chapter.chapterId);
-    const mediumIds = [parseInt(mediumId)];
+    const mediumIds = [Number.parseInt(mediumId)];
     
     // Call the test-paper allocation API
     const response = await axiosInstance.get('/create-test-paper/allocation', {
@@ -805,14 +796,14 @@ const generateEquallyMarksDistribution = async () => {
       latestAllocationData.value = allocationData
       console.log('latestAllocationData set from Generate Equally:', latestAllocationData.value)
       
-      allocationData.chapterMarks.forEach(apiChapter => {
+      for (const apiChapter of allocationData.chapterMarks) {
         const chapter = chapterMarksData.value.find(c => c.chapterId === apiChapter.chapterId);
         if (chapter) {
           chapter.marks = apiChapter.absoluteMarks;
           // Recalculate percentage
           chapter.percentage = calculatePercentage(apiChapter.absoluteMarks);
         }
-      });
+      }
 
       console.log('Marks distributed from Generate Equally API:', 
         allocationData.chapterMarks.map(c => `${c.chapterName}: ${c.absoluteMarks}`));
@@ -908,9 +899,9 @@ const calculatePercentage = (marks: number): number => {
 
 // Update percentages for all chapters based on their current marks
 const updatePercentages = () => {
-  chapterMarksData.value.forEach(chapter => {
+  for (const chapter of chapterMarksData.value) {
     chapter.percentage = calculatePercentage(chapter.marks)
-  })
+  }
 }
 
 // Initialize component
@@ -953,9 +944,9 @@ const autoGenerateAllocation = async () => {
     console.log('Auto-generating allocation on page load...')
     
     // Get the parameters from the current context
-    const patternIdNum = parseInt(patternId)
+    const patternIdNum = Number.parseInt(patternId)
     const chapterIds = chapterMarksData.value.map(chapter => chapter.chapterId)
-    const mediumIds = [parseInt(mediumId)]
+    const mediumIds = [Number.parseInt(mediumId)]
     
     // Call the test-paper allocation API
     const response = await axiosInstance.get('/create-test-paper/allocation', {
@@ -979,14 +970,14 @@ const autoGenerateAllocation = async () => {
       // Store the latest allocation data for preview - THIS IS KEY!
       latestAllocationData.value = allocationData
       
-      allocationData.chapterMarks.forEach(apiChapter => {
+      for (const apiChapter of allocationData.chapterMarks) {
         const chapter = chapterMarksData.value.find(c => c.chapterId === apiChapter.chapterId)
         if (chapter) {
           chapter.marks = apiChapter.absoluteMarks
           // Recalculate percentage
           chapter.percentage = calculatePercentage(apiChapter.absoluteMarks)
         }
-      })
+      }
 
       console.log('Auto allocation completed successfully:', 
         allocationData.chapterMarks.map(c => `${c.chapterName}: ${c.absoluteMarks}`))

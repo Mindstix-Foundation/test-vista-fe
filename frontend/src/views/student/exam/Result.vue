@@ -1,5 +1,6 @@
 <template>
   <div class="result-page">
+    <AppBreadcrumb />
     <!-- Loading Spinner -->
     <LoadingSpinner :show="isLoading" :showOverlay="true" />
 
@@ -93,6 +94,67 @@
               <strong class="stat-number">{{ formatTime(result.time_taken_seconds) }}</strong>
               <small class="d-block stat-label">Time Taken</small>
             </div>
+          </div>
+
+          <!-- Rank / Percentile / Qualification (competitive & entrance mocks) -->
+          <div v-if="result.rank || result.percentile != null || (result.overall_qualified !== null && result.overall_qualified !== undefined)" class="rank-strip">
+            <div v-if="result.rank" class="rank-item">
+              <i class="bi bi-bar-chart-steps me-2"></i>
+              <span>Rank <strong>{{ result.rank }}</strong> of {{ result.total_participants }}</span>
+            </div>
+            <div v-if="result.percentile !== undefined && result.percentile !== null" class="rank-item">
+              <i class="bi bi-graph-up-arrow me-2"></i>
+              <span><strong>{{ result.percentile }}</strong> percentile</span>
+            </div>
+            <div v-if="result.overall_qualified !== null && result.overall_qualified !== undefined" class="rank-item">
+              <i :class="result.overall_qualified ? 'bi bi-patch-check-fill text-success' : 'bi bi-x-octagon-fill text-danger'" class="me-2"></i>
+              <span :class="result.overall_qualified ? 'text-success' : 'text-danger'">
+                <strong>{{ result.overall_qualified ? 'Qualified' : 'Not Qualified' }}</strong> (cutoff)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section-wise Performance (competitive & entrance mocks) -->
+        <div v-if="result.section_wise_scores && result.section_wise_scores.length > 0" class="chapter-analysis-section">
+          <div class="section-header">
+            <h4 class="section-title">
+              <i class="bi bi-layout-three-columns"></i> Section-wise Performance
+            </h4>
+          </div>
+          <div class="chapter-table-container">
+            <table class="table chapter-table">
+              <thead>
+                <tr>
+                  <th scope="col">Section</th>
+                  <th scope="col" class="text-center">Questions</th>
+                  <th scope="col" class="text-center">Attempted</th>
+                  <th scope="col" class="text-center">Score</th>
+                  <th scope="col" class="text-center">Cutoff</th>
+                  <th scope="col" class="text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="section in result.section_wise_scores" :key="section.name" class="chapter-row">
+                  <td class="chapter-name-cell"><strong>{{ section.name }}</strong></td>
+                  <td class="text-center"><span class="stat-number">{{ section.questions }}</span></td>
+                  <td class="text-center"><span class="stat-number">{{ section.attempted }}</span></td>
+                  <td class="text-center">
+                    <span class="stat-number">{{ section.obtained }}</span>
+                    <small class="text-muted">/{{ section.total }}</small>
+                  </td>
+                  <td class="text-center">
+                    <span class="stat-number">{{ section.qualifying_marks ?? '—' }}</span>
+                  </td>
+                  <td class="text-center">
+                    <span v-if="section.qualified === null" class="text-muted">—</span>
+                    <span v-else class="performance-badge" :class="section.qualified ? 'badge-excellent' : 'badge-poor'">
+                      {{ section.qualified ? 'Cleared' : 'Below Cutoff' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -251,7 +313,7 @@
               @click="retryLoadResults"
               :disabled="isLoadingDetailedReport"
             >
-              <span v-if="isLoadingDetailedReport" class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <output v-if="isLoadingDetailedReport" class="spinner-border spinner-border-sm me-2"></output>
               <i class="bi bi-arrow-clockwise" v-else></i> 
               {{ isLoadingDetailedReport ? 'Loading...' : 'Load Detailed Analysis' }}
             </button>
@@ -284,31 +346,55 @@
                 </div>
               </div>
               <div class="question-content">
+                <div v-if="question.passage_text" class="passage-panel mb-3">
+                  <div class="passage-label">
+                    Passage
+                    <span v-if="question.group_order" class="text-muted">
+                      (Part {{ question.group_order }})
+                    </span>
+                  </div>
+                  <p class="passage-text">{{ question.passage_text }}</p>
+                </div>
                 <p class="question-text">{{ question.question_text }}</p>
                 <div v-if="question.question_image" class="question-image">
-                  <img :src="question.question_image" alt="Question Image" class="img-fluid">
+                  <img :src="question.question_image" alt="Question" class="img-fluid">
                 </div>
               </div>
               <div class="options-container">
-                <div v-if="question.selected_option === null || question.selected_option === undefined" class="not-attempted-message">
+                <div v-if="!isQuestionAttempted(question)" class="not-attempted-message">
                   <i class="bi bi-exclamation-triangle-fill text-warning"></i>
                   <span>This question was not attempted</span>
                 </div>
-                <div 
-                  v-for="(option, optionIndex) in question.options" 
-                  :key="optionIndex"
-                  class="option-item"
-                  :class="getOptionClass(optionIndex, question.correct_option, question.selected_option_index)"
-                >
-                  <span class="option-label">{{ String.fromCharCode(65 + optionIndex) }}.</span>
-                  <span class="option-text">{{ option }}</span>
-                  <span v-if="optionIndex === question.correct_option" class="correct-indicator">
-                    <i class="bi bi-check-circle-fill text-success"></i>
-                  </span>
-                  <span v-if="optionIndex === question.selected_option_index && optionIndex !== question.correct_option && question.selected_option_index !== -1" class="wrong-indicator">
-                    <i class="bi bi-x-circle-fill text-danger"></i>
-                  </span>
-                </div>
+                <template v-if="question.answer_format === 'NUMERIC'">
+                  <div class="option-item" :class="question.is_correct === true ? 'option-correct' : (isQuestionAttempted(question) ? 'option-wrong' : '')">
+                    <span class="option-label">Your answer:</span>
+                    <span class="option-text">{{ isQuestionAttempted(question) ? question.numeric_answer : '—' }}</span>
+                  </div>
+                  <div class="option-item option-correct">
+                    <span class="option-label">Correct:</span>
+                    <span class="option-text">{{ question.correct_numeric ?? '—' }}</span>
+                    <span class="correct-indicator">
+                      <i class="bi bi-check-circle-fill text-success"></i>
+                    </span>
+                  </div>
+                </template>
+                <template v-else>
+                  <div 
+                    v-for="(option, optionIndex) in question.options" 
+                    :key="optionIndex"
+                    class="option-item"
+                    :class="getOptionClass(optionIndex, question.correct_option, question.selected_option_index)"
+                  >
+                    <span class="option-label">{{ String.fromCharCode(65 + optionIndex) }}.</span>
+                    <span class="option-text">{{ option }}</span>
+                    <span v-if="optionIndex === question.correct_option" class="correct-indicator">
+                      <i class="bi bi-check-circle-fill text-success"></i>
+                    </span>
+                    <span v-if="optionIndex === question.selected_option_index && optionIndex !== question.correct_option && question.selected_option_index !== -1" class="wrong-indicator">
+                      <i class="bi bi-x-circle-fill text-danger"></i>
+                    </span>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -355,6 +441,14 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { testAssignmentService, type ExamResult, type DetailedReport } from '@/services/testAssignmentService'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import AppBreadcrumb from '@/components/common/AppBreadcrumb.vue'
+import {
+  getRecommendationType,
+  getRecommendationChapters,
+  getRecommendationMessage,
+  getRecommendationClass,
+} from '@/utils/recommendationParsing'
+import { useExamSessionGuard } from '@/composables/useExamSessionGuard'
 
 // Component name
 defineOptions({
@@ -373,14 +467,14 @@ interface Question {
   is_correct: boolean
   marks_obtained: number
   time_spent_seconds?: number
+  answer_format?: 'MCQ' | 'NUMERIC'
+  numeric_answer?: number | null
+  correct_numeric?: number | null
+  question_group_id?: number | null
+  group_order?: number | null
+  passage_text?: string | null
 }
 
-interface FullscreenDocument extends Document {
-  webkitFullscreenElement?: Element
-  msFullscreenElement?: Element
-  webkitExitFullscreen?: () => Promise<void>
-  msExitFullscreen?: () => Promise<void>
-}
 
 interface HttpError extends Error {
   response?: {
@@ -399,13 +493,17 @@ const isLoading = ref(true)
 const error = ref('')
 const result = ref<ExamResult>({} as ExamResult)
 const detailedReport = ref<DetailedReport | null>(null)
-const showLeaveConfirmation = ref(false)
 const scoreCircle = ref<HTMLElement>()
 const isLoadingDetailedReport = ref(false)
 const sortBy = ref('sequence')
 
-// Device detection
-const isIOSDevice = ref(false)
+const {
+  isIOSDevice,
+  showLeaveConfirmation,
+  detectDevice,
+  exitFullscreen,
+  blockBackNavigation,
+} = useExamSessionGuard()
 
 // Computed properties for display
 const displayObtainedMarks = computed(() => {
@@ -413,7 +511,7 @@ const displayObtainedMarks = computed(() => {
 })
 
 const displayPercentage = computed(() => {
-  return parseFloat(result.value.percentage || 0).toFixed(2)
+  return Number.parseFloat(result.value.percentage || 0).toFixed(2)
 })
 
 const displayAccuracy = computed(() => {
@@ -555,15 +653,6 @@ const getPerformanceText = (percentage: number): string => {
   return 'Needs Improvement'
 }
 
-const getChapterCardClass = (performanceLevel: string): string => {
-  switch (performanceLevel) {
-    case 'excellent': return 'chapter-excellent'
-    case 'good': return 'chapter-good'
-    case 'average': return 'chapter-average'
-    default: return 'chapter-poor'
-  }
-}
-
 const getChapterRowClass = (performanceLevel: string): string => {
   switch (performanceLevel) {
     case 'excellent': return 'chapter-excellent'
@@ -591,29 +680,36 @@ const getProgressBarClass = (performanceLevel: string): string => {
   }
 }
 
+const isQuestionAttempted = (question: Question): boolean => {
+  if (question.answer_format === 'NUMERIC') {
+    return question.numeric_answer !== null && question.numeric_answer !== undefined
+  }
+  return question.selected_option !== null && question.selected_option !== undefined
+}
+
 const getQuestionCardClass = (question: Question): string => {
-  if (question.selected_option === null || question.selected_option === undefined) return 'question-skipped'
+  if (!isQuestionAttempted(question)) return 'question-skipped'
   if (question.is_correct === true) return 'question-correct'
   if (question.is_correct === false) return 'question-wrong'
   return 'question-skipped'
 }
 
 const getQuestionStatusClass = (question: Question): string => {
-  if (question.selected_option === null || question.selected_option === undefined) return 'status-skipped'
+  if (!isQuestionAttempted(question)) return 'status-skipped'
   if (question.is_correct === true) return 'status-correct'
   if (question.is_correct === false) return 'status-wrong'
   return 'status-skipped'
 }
 
 const getQuestionStatusIcon = (question: Question): string => {
-  if (question.selected_option === null || question.selected_option === undefined) return 'bi bi-dash-circle-fill'
+  if (!isQuestionAttempted(question)) return 'bi bi-dash-circle-fill'
   if (question.is_correct === true) return 'bi bi-check-circle-fill'
   if (question.is_correct === false) return 'bi bi-x-circle-fill'
   return 'bi bi-dash-circle-fill'
 }
 
 const getQuestionStatusText = (question: Question): string => {
-  if (question.selected_option === null || question.selected_option === undefined) return 'Not Attempted'
+  if (!isQuestionAttempted(question)) return 'Not Attempted'
   if (question.is_correct === true) return 'Correct'
   if (question.is_correct === false) return 'Wrong'
   return 'Not Attempted'
@@ -626,87 +722,13 @@ const getOptionClass = (optionIndex: number, correctOption: number, selectedOpti
   return ''
 }
 
-// New methods for parsing recommendations
-const getRecommendationEmoji = (recommendation: string): string => {
-  const match = recommendation.match(/^(🔴|🟡|🟢)/)
-  return match ? match[1] : '💡'
-}
-
-const getRecommendationType = (recommendation: string): string => {
-  if (recommendation.includes('🔴 Critical Focus Areas')) return 'Critical Focus Areas'
-  if (recommendation.includes('🟡 Areas for Enhancement')) return 'Areas for Enhancement'
-  if (recommendation.includes('🟢 Strong Performance')) return 'Strong Performance'
-  return 'Recommendation'
-}
-
-const getRecommendationChapters = (recommendation: string): string => {
-  // Try multiple regex patterns to handle different formats
-  
-  // Pattern 1: Standard format ": chapter_name -"
-  let match = recommendation.match(/: ([^-]+) -/)
-  if (match && match[1].trim()) {
-    return formatChapterNames(match[1].trim())
-  }
-  
-  // Pattern 2: Handle format with emoji prefix ": chapter_name"
-  match = recommendation.match(/: (.+?) - /)
-  if (match && match[1].trim()) {
-    return formatChapterNames(match[1].trim())
-  }
-  
-  // Pattern 3: Extract everything between ":" and first " -" or end
-  match = recommendation.match(/: (.+?)(?:\s-\s|$)/)
-  if (match && match[1].trim()) {
-    return formatChapterNames(match[1].trim())
-  }
-  
-  // Pattern 4: Fallback - extract content after type indicator
-  const typeIndicators = ['🔴 Critical Focus Areas', '🟡 Areas for Enhancement', '🟢 Strong Performance']
-  for (const indicator of typeIndicators) {
-    if (recommendation.includes(indicator)) {
-      const afterIndicator = recommendation.split(indicator)[1]
-      if (afterIndicator) {
-        // Extract text after ":" and before " -"
-        const colonMatch = afterIndicator.match(/:\s*(.+?)(?:\s-|$)/)
-        if (colonMatch && colonMatch[1].trim()) {
-          return formatChapterNames(colonMatch[1].trim())
-        }
-      }
-    }
-  }
-  
-  // If all patterns fail, return a fallback message
-  return 'Multiple Chapters'
-}
-
-const formatChapterNames = (chapters: string): string => {
-  if (!chapters || chapters.trim() === '') {
-    return 'Multiple Chapters'
-  }
-  
-  // Simply return all chapter names without truncation
-  return chapters.trim()
-}
-
-const getRecommendationMessage = (recommendation: string): string => {
-  const match = recommendation.match(/ - (.+)$/)
-  return match ? match[1].trim() : recommendation
-}
-
-const getRecommendationClass = (recommendation: string): string => {
-  if (recommendation.includes('🔴 Critical Focus Areas')) return 'recommendation-critical'
-  if (recommendation.includes('🟡 Areas for Enhancement')) return 'recommendation-enhancement'
-  if (recommendation.includes('🟢 Strong Performance')) return 'recommendation-strong'
-  return 'recommendation-default'
-}
-
 const animateScore = () => {
   if (!scoreCircle.value) return
   
   let currentMarks = 0
   let currentPercentage = 0
   const targetMarks = displayObtainedMarks.value || 0
-  const targetPercentage = parseFloat(displayPercentage.value) || 0
+  const targetPercentage = Number.parseFloat(displayPercentage.value) || 0
   const marksIncrement = targetMarks / 50
   const percentageIncrement = targetPercentage / 50
   
@@ -731,56 +753,6 @@ const animateScore = () => {
       percentageValueEl.textContent = Math.round(currentPercentage * 100) / 100 + '%'
     }
   }, 30)
-}
-
-const detectDevice = () => {
-  const userAgent = navigator.userAgent.toLowerCase()
-  isIOSDevice.value = /iphone|ipod/.test(userAgent) && !window.MSStream
-}
-
-const exitFullscreen = () => {
-  // Skip fullscreen exit for iOS devices since it's not supported
-  if (isIOSDevice.value) {
-    console.log('Fullscreen not supported on iOS device')
-    return
-  }
-  
-  const doc = document as FullscreenDocument
-  if (document.fullscreenElement ||
-      doc.webkitFullscreenElement ||
-      doc.msFullscreenElement) {
-    
-    if (document.exitFullscreen) {
-      document.exitFullscreen()
-    } else if (doc.webkitExitFullscreen) {
-      doc.webkitExitFullscreen()
-    } else if (doc.msExitFullscreen) {
-      doc.msExitFullscreen()
-    }
-  }
-}
-
-const blockBackNavigation = () => {
-  window.history.pushState(null, '', window.location.href)
-  
-  window.addEventListener('popstate', () => {
-    window.history.pushState(null, '', window.location.href)
-    showLeaveConfirmation.value = true
-  })
-  
-  window.addEventListener('keydown', (e) => {
-    if ((e.altKey && e.key === 'ArrowLeft') ||
-        (e.altKey && e.key === 'ArrowRight') ||
-        e.key === 'F5' ||
-        (e.ctrlKey && e.key === 'r')) {
-      e.preventDefault()
-      return false
-    }
-  })
-  
-  document.addEventListener('contextmenu', (e) => {
-    e.preventDefault()
-  })
 }
 
 const confirmLeave = () => {
@@ -989,6 +961,23 @@ onUnmounted(() => {
   background: transparent !important;
 }
 
+/* Rank / percentile / qualified strip (competitive mocks) */
+.rank-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem 2.5rem;
+  padding: 14px 10px;
+  margin-top: 8px;
+  border-top: 2px solid #f8f9fa;
+}
+
+.rank-item {
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+}
+
 .stats-row .col-lg {
   display: flex;
   flex-direction: column;
@@ -1019,26 +1008,6 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: block !important;
-}
-
-/* Stats Row Styling */
-.stats-row {
-  justify-content: center;
-  align-items: stretch;
-}
-
-.stats-row .col-lg {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  min-width: 0;
-}
-
-.stats-row i {
-  font-size: 1.8rem !important;
-  margin-bottom: 8px !important;
-  color: rgba(255, 255, 255, 0.9);
 }
 
 .stat-number {
@@ -1233,11 +1202,6 @@ onUnmounted(() => {
   font-weight: 600;
   color: #333;
   min-width: 200px;
-}
-
-.stat-number {
-  font-weight: 600;
-  font-size: 1.1rem;
 }
 
 .correct-count {
@@ -1612,6 +1576,28 @@ onUnmounted(() => {
 
 .question-content {
   margin-bottom: 15px;
+}
+
+.passage-panel {
+  background: #f4f7fb;
+  border: 1px solid #d7e3f4;
+  border-left: 4px solid #0d6efd;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.passage-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #0d6efd;
+  margin-bottom: 6px;
+}
+
+.passage-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
 }
 
 .question-text {

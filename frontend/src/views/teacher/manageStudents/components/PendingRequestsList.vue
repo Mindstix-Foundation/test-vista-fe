@@ -2,9 +2,9 @@
   <div>
     <!-- Loading State -->
     <div v-if="loading" class="text-center py-4">
-      <div class="spinner-border text-warning" role="status">
+      <output class="spinner-border text-warning">
         <span class="visually-hidden">Loading...</span>
-      </div>
+      </output>
       <p class="mt-2 text-muted">Loading pending requests...</p>
     </div>
 

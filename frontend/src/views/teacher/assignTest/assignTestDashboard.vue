@@ -7,16 +7,52 @@
         <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3">
           <div class="header-title-section">
             <h4 class="m-0 fw-bold text-dark">Assign Online Test</h4>
-            <p class="text-muted mb-0 small">Manage and assign test papers to students</p>
+            <p class="text-muted mb-0 small">
+              Create and assign <strong>online</strong> papers here.
+              Nav “Create Test Paper (PDF / Offline)” is for printable papers only — those do not appear in this list.
+            </p>
           </div>
           <!-- Desktop create button -->
           <div class="d-none d-sm-block">
-            <router-link to="/teacher/assign-test/create" class="btn btn-primary btn-create">
+            <router-link :to="createRoute" class="btn btn-primary btn-create">
               <i class="bi bi-plus-circle me-2"></i>
-              Create Test Paper
+              {{ createLabel }}
             </router-link>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div v-if="orgGateChecked && !hasActiveOrg" class="row mb-3">
+      <div class="col-12">
+        <div class="alert alert-warning d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-0">
+          <div>
+            <strong>Organization required to assign.</strong>
+            Create or join a School / Coaching Center first. You can still create papers.
+          </div>
+          <div class="d-flex gap-2">
+            <router-link :to="{ name: 'teacherCreateOrg' }" class="btn btn-dark btn-sm">Create</router-link>
+            <router-link :to="{ name: 'teacherJoinOrg' }" class="btn btn-outline-dark btn-sm">Join</router-link>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Exam Category Tabs -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <ul class="nav nav-tabs category-tabs">
+          <li v-for="tab in categoryTabs" :key="tab.value" class="nav-item">
+            <button
+              class="nav-link"
+              :class="{ active: activeCategory === tab.value }"
+              @click="setCategory(tab.value)"
+            >
+              {{ tab.label }}
+              <span v-if="!isLoading" class="tab-count">{{ countByCategory(tab.value) }}</span>
+            </button>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -64,9 +100,9 @@
       <div class="col-12">
         <!-- Loading State -->
         <div v-if="isLoading" class="loading-state">
-          <div class="spinner-border text-primary" role="status">
+          <output class="spinner-border text-primary">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-3 text-muted">Loading test papers...</p>
         </div>
 
@@ -79,7 +115,9 @@
           >
             <!-- Card Header -->
             <div class="card-header">
-              <h5 class="card-title">{{ paper.name }}</h5>
+              <h5 class="card-title">
+                {{ paper.name }}
+              </h5>
               <div class="card-meta">
                 <span class="standard-badge">{{ formatStandard(paper) }}</span>
                 <span class="subject-badge">{{ formatSubject(paper) }}</span>
@@ -93,7 +131,7 @@
                   <i class="bi bi-award text-success"></i>
                   <div class="info-content">
                     <span class="info-label">Total Marks</span>
-                    <span class="info-value">{{ paper.pattern.total_marks }}</span>
+                    <span class="info-value">{{ paperTotalMarks(paper) }}</span>
                   </div>
                 </div>
                 <div class="info-item">
@@ -139,10 +177,11 @@
               <button 
                 @click="assignToStudents(paper)" 
                 class="btn btn-primary btn-action"
-                title="Assign to Students"
+                :disabled="!hasActiveOrg"
+                :title="!hasActiveOrg ? 'Join an organization to assign' : (paper.exam_program ? 'Assign to aspirants' : 'Assign to Students')"
               >
                 <i class="bi bi-person-plus"></i>
-                <span class="ms-2">Assign Students</span>
+                <span class="ms-2">{{ paper.exam_program ? 'Assign Aspirants' : 'Assign Students' }}</span>
               </button>
               <button 
                 @click="viewQuestions(paper)" 
@@ -178,11 +217,11 @@
             <i class="bi bi-file-earmark-text empty-icon"></i>
             <h5 class="empty-title">No Test Papers Found</h5>
             <p class="empty-text">
-              {{ searchQuery ? 'Try adjusting your search terms or create a new test paper.' : 'Create your first test paper to get started.' }}
+              {{ searchQuery ? 'Try adjusting your search terms or create a new test paper.' : emptyStateText }}
             </p>
-            <router-link to="/teacher/assign-test/create" class="btn btn-primary">
+            <router-link :to="createRoute" class="btn btn-primary">
               <i class="bi bi-plus-circle me-2"></i>
-              Create Test Paper
+              {{ createLabel }}
             </router-link>
           </div>
         </div>
@@ -191,9 +230,9 @@
 
     <!-- Mobile Create Button -->
     <div class="mobile-create-btn d-sm-none">
-      <router-link to="/teacher/assign-test/create" class="btn btn-primary btn-create-mobile">
+      <router-link :to="createRoute" class="btn btn-primary btn-create-mobile">
         <i class="bi bi-plus-circle me-2"></i>
-        Create Test Paper
+        {{ createLabel }}
       </router-link>
     </div>
 
@@ -329,6 +368,7 @@
                       <div class="time-inputs">
                         <div class="time-input-group">
                           <input 
+                            id="dashboard-available-time-hour"
                             type="number" 
                             v-model="displayHour" 
                             min="1" 
@@ -337,11 +377,12 @@
                             placeholder="HH"
                             @input="updateDisplayTime"
                           >
-                          <label>Hour</label>
+                          <label for="dashboard-available-time-hour">Hour</label>
                         </div>
                         <span class="time-separator">:</span>
                         <div class="time-input-group">
                           <input 
+                            id="dashboard-available-time-minute"
                             type="number" 
                             v-model="availableTime.minute" 
                             min="0" 
@@ -350,7 +391,7 @@
                             placeholder="MM"
                             @input="updateAvailableTime"
                           >
-                          <label>Minute</label>
+                          <label for="dashboard-available-time-minute">Minute</label>
                         </div>
                         <div class="ampm-toggle">
                           <button 
@@ -400,10 +441,10 @@
             <!-- Student Selection -->
             <div class="mb-3">
               <div class="d-flex justify-content-between align-items-center mb-3">
-                <label class="form-label mb-0 fw-semibold">
+                <div class="form-label mb-0 fw-semibold">
                   Select Students 
                   <span v-if="!loadingStudents" class="text-muted small">({{ filteredStudents.length }} {{ assignedOnlyToggle ? 'assigned' : 'available' }})</span>
-                </label>
+                </div>
                 <div class="form-check form-switch">
                   <input 
                     class="form-check-input" 
@@ -421,9 +462,9 @@
               <div class="students-container">
                 <!-- Loading -->
                 <div v-if="loadingStudents" class="students-loading">
-                  <div class="spinner-border spinner-border-sm text-primary" role="status">
+                  <output class="spinner-border spinner-border-sm text-primary">
                     <span class="visually-hidden">Loading...</span>
-                  </div>
+                  </output>
                   <p class="mt-2 mb-0 text-muted small">Loading ITI students...</p>
                 </div>
                 
@@ -472,9 +513,21 @@
                   <h6 class="text-muted mb-2">
                     {{ assignedOnlyToggle ? 'No assigned students found for this test.' : 'No non-assigned students found for this test.' }}
                   </h6>
-                  <p class="text-muted small mb-0">
-                    Students need to request enrollment and be approved by you before they can be assigned tests.
+                  <p class="text-muted small mb-2">
+                    <template v-if="selectedPaper?.exam_program && !selectedPaper?.pattern && !assignedOnlyToggle">
+                      Org approval alone is not enough. Create/select an exam cohort, map teachers, place learners, and enroll them in the exam program.
+                    </template>
+                    <template v-else>
+                      Students need to request enrollment and be approved by you before they can be assigned tests.
+                    </template>
                   </p>
+                  <router-link
+                    v-if="selectedPaper?.exam_program && !selectedPaper?.pattern && !assignedOnlyToggle"
+                    :to="{ name: 'teacherOrgCohorts' }"
+                    class="btn btn-dark btn-sm"
+                  >
+                    Open Exam Cohorts
+                  </router-link>
                 </div>
               </div>
             </div>
@@ -487,7 +540,7 @@
               @click="confirmAssignment"
               :disabled="loadingStudents || filteredStudents.length === 0 || assigningTest || !hasSelectedStudents"
             >
-              <span v-if="assigningTest" class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <output v-if="assigningTest" class="spinner-border spinner-border-sm me-2"></output>
               <i v-else class="bi bi-person-plus me-2"></i>
               {{ assigningTest ? 'Assigning...' : 'Assign Test' }}
             </button>
@@ -507,9 +560,9 @@
           <div class="modal-body">
             <!-- Loading -->
             <div v-if="loadingQuestions" class="text-center my-5">
-              <div class="spinner-border" role="status">
+              <output class="spinner-border">
                 <span class="visually-hidden">Loading...</span>
-              </div>
+              </output>
               <p class="mt-3">Loading questions...</p>
             </div>
 
@@ -606,6 +659,7 @@ import { Modal } from 'bootstrap'
 import axiosInstance from '@/config/axios'
 import { useToastStore } from '@/stores/toast'
 import ToastNotification from '@/components/common/ToastNotification.vue'
+import { formatIsoDateDdMmYyyy, formatIsoDateTimeDdMmYyyy12h } from '@/utils/dateFormatters'
 
 const router = useRouter()
 const toastStore = useToastStore()
@@ -624,7 +678,8 @@ interface TestPaper {
   randomize_options: boolean
   is_online: boolean
   created_at: string
-  pattern: {
+  // Board papers only — competitive/entrance mocks carry exam_program/paper_template instead
+  pattern?: {
     id: number
     pattern_name: string
     total_marks: number
@@ -640,15 +695,33 @@ interface TestPaper {
       id: number
       marks_per_question: number
     }>
-  }
+  } | null
   chapters: Array<{
     id: number
     name: string
   }>
-  school: {
+  school?: {
     id: number
     name: string
-  }
+  } | null
+  exam_category?: string
+  exam_program?: {
+    id: number
+    name: string
+    exam_body?: string
+  } | null
+  exam_stage?: {
+    id: number
+    name: string
+  } | null
+  paper_template?: {
+    id: number
+    name: string
+    total_marks: number
+  } | null
+  total_marks?: number
+  standard_name?: string
+  subject_name?: string
 }
 
 interface QuestionOption {
@@ -783,10 +856,58 @@ const months = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
+// Exam category tabs (Board = legacy school papers, Entrance/Competitive = Option C mocks)
+const categoryTabs = [
+  { value: 'BOARD', label: 'Board Exams' },
+  { value: 'ENTRANCE', label: 'Entrance Exams' },
+  { value: 'COMPETITIVE', label: 'Competitive Exams' }
+]
+const activeCategory = ref(localStorage.getItem('assignTestActiveCategory') || 'BOARD')
+const hasActiveOrg = ref(false)
+const orgGateChecked = ref(false)
+
+const setCategory = (category: string) => {
+  activeCategory.value = category
+  localStorage.setItem('assignTestActiveCategory', category)
+}
+
+const paperCategory = (paper: TestPaper) => paper.exam_category || 'BOARD'
+const countByCategory = (category: string) =>
+  testPapers.value.filter(paper => paperCategory(paper) === category).length
+
+const paperTotalMarks = (paper: TestPaper) =>
+  paper.total_marks ?? paper.pattern?.total_marks ?? 0
+
+const createRoute = computed(() =>
+  activeCategory.value === 'BOARD'
+    ? '/teacher/assign-test/create'
+    : `/teacher/assign-test/create-mock?category=${activeCategory.value}`
+)
+const createLabel = computed(() =>
+  activeCategory.value === 'BOARD' ? 'Create Online Test Paper' : 'Create Mock Test'
+)
+const emptyStateText = computed(() => {
+  if (activeCategory.value === 'BOARD') {
+    return 'Create your first online board test paper here (not from PDF / Offline Create).'
+  }
+  if (activeCategory.value === 'ENTRANCE') {
+    return 'Create an entrance mock from a paper pattern, then assign it to enrolled aspirants.'
+  }
+  return 'Create a competitive mock from a paper pattern, then assign it to enrolled aspirants.'
+})
+
+const preferCategoryWithPapers = () => {
+  if (countByCategory(activeCategory.value) > 0) return
+  const preferred = categoryTabs.find((t) => countByCategory(t.value) > 0)
+  if (preferred) {
+    setCategory(preferred.value)
+  }
+}
+
 // Reactive variables
 const testPapers = ref<TestPaper[]>([])
 const filteredTestPapers = computed(() => {
-  let filtered = testPapers.value
+  let filtered = testPapers.value.filter(paper => paperCategory(paper) === activeCategory.value)
 
   // Apply search filter
   if (searchQuery.value.trim()) {
@@ -795,7 +916,7 @@ const filteredTestPapers = computed(() => {
       paper.name.toLowerCase().includes(query) ||
       formatSubject(paper).toLowerCase().includes(query) ||
       formatStandard(paper).toLowerCase().includes(query) ||
-      paper.pattern.total_marks.toString().includes(query)
+      paperTotalMarks(paper).toString().includes(query)
     )
   }
 
@@ -815,18 +936,21 @@ const filteredTestPapers = computed(() => {
           bValue = new Date(b.created_at)
           break
         case 'marks':
-          aValue = a.pattern.total_marks
-          bValue = b.pattern.total_marks
+          aValue = paperTotalMarks(a)
+          bValue = paperTotalMarks(b)
           break
         default:
           return 0
       }
       
       if (direction === 'asc') {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
-      } else {
-        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
+        if (aValue < bValue) return -1
+        if (aValue > bValue) return 1
+        return 0
       }
+      if (aValue > bValue) return -1
+      if (aValue < bValue) return 1
+      return 0
     })
   }
 
@@ -868,37 +992,15 @@ const hasSelectedStudents = computed(() => {
 
 // Date formatting computed properties
 const formattedDueDate = computed({
-  get: () => {
-    if (!assignmentData.value.dueDate) return ''
-    const date = new Date(assignmentData.value.dueDate)
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    return `${day}-${month}-${year}`
-  },
-  set: (value: string) => {
+  get: () => formatIsoDateDdMmYyyy(assignmentData.value.dueDate),
+  set: (_value: string) => {
     // This will be handled by the date picker
   }
 })
 
 const formattedAvailableFrom = computed({
-  get: () => {
-    if (!assignmentData.value.availableFrom) return ''
-    const date = new Date(assignmentData.value.availableFrom)
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    
-    // Convert to 12-hour format
-    let hour = date.getHours()
-    const minute = date.getMinutes().toString().padStart(2, '0')
-    const ampm = hour >= 12 ? 'PM' : 'AM'
-    hour = hour % 12
-    if (hour === 0) hour = 12
-    
-    return `${day}-${month}-${year} ${hour}:${minute} ${ampm}`
-  },
-  set: (value: string) => {
+  get: () => formatIsoDateTimeDdMmYyyy12h(assignmentData.value.availableFrom),
+  set: (_value: string) => {
     // This will be handled by the date picker
   }
 })
@@ -940,6 +1042,7 @@ const fetchOnlineTestPapers = async () => {
     
     if (response.data && Array.isArray(response.data)) {
       testPapers.value = response.data
+      preferCategoryWithPapers()
       console.log('Fetched online test papers:', response.data)
     } else {
       console.warn('Unexpected API response format:', response.data)
@@ -966,21 +1069,19 @@ const fetchOnlineTestPapers = async () => {
 
 // Helper functions to format data for display
 const formatSubject = (paper: TestPaper) => {
-  // Use the pattern's subject information
+  // Board: pattern subject. Competitive/entrance: exam program (backend fills subject_name).
   if (paper.pattern?.subject) {
     return paper.pattern.subject.name
   }
-  // Fallback to pattern name
-  return paper.pattern?.pattern_name || paper.name
+  return paper.subject_name || paper.exam_program?.name || paper.name
 }
 
 const formatStandard = (paper: TestPaper) => {
-  // Use the pattern's standard information
+  // Board: pattern standard. Competitive/entrance: exam stage (backend fills standard_name).
   if (paper.pattern?.standard) {
     return paper.pattern.standard.name
   }
-  // Fallback to pattern name
-  return paper.pattern?.pattern_name || paper.name
+  return paper.standard_name || paper.exam_stage?.name || ''
 }
 
 const formatMediums = (paper: TestPaper) => {
@@ -1003,6 +1104,10 @@ const sortTestPapers = () => {
 }
 
 const assignToStudents = async (paper: TestPaper) => {
+  if (!hasActiveOrg.value) {
+    alert('Join or create a School / Coaching Center before assigning tests.')
+    return
+  }
   // Store test paper data temporarily in sessionStorage
   sessionStorage.setItem(`testPaper_${paper.id}`, JSON.stringify(paper))
   
@@ -1013,77 +1118,84 @@ const assignToStudents = async (paper: TestPaper) => {
   })
 }
 
-// API method to load ITI students instead of enrolled students
+const fetchAssignedStudentIds = async (paperId?: number): Promise<Set<number>> => {
+  if (!paperId) return new Set<number>()
+  try {
+    const assignmentsResponse = await axiosInstance.get('/test-assignments', {
+      params: { test_paper_id: paperId }
+    })
+    if (assignmentsResponse.data && Array.isArray(assignmentsResponse.data)) {
+      return new Set(assignmentsResponse.data.map((a: any) => a.student_id))
+    }
+  } catch (assignmentError) {
+    console.warn('Could not fetch existing assignments:', assignmentError)
+  }
+  return new Set<number>()
+}
+
+const applyAssignedOnlyFilter = () => {
+  if (assignedOnlyToggle.value === true) {
+    students.value = students.value.filter(student => student.isAssigned)
+  } else if (assignedOnlyToggle.value === false) {
+    students.value = students.value.filter(student => !student.isAssigned)
+  }
+}
+
+const loadAspirantsForPaper = async (paper: TestPaper, assignedStudentIds: Set<number>) => {
+  if (!paper.exam_program) {
+    students.value = []
+    return
+  }
+  const response = await axiosInstance.get(
+    `/participants/assignable-students/${paper.exam_program.id}`
+  )
+  students.value = (Array.isArray(response.data) ? response.data : []).map((participant: any) => ({
+    id: participant.id,
+    name: participant.name,
+    rollNumber: participant.registration_code,
+    selected: false,
+    isAssigned: assignedStudentIds.has(participant.id)
+  }))
+}
+
+const loadBoardEnrolledStudents = async (paper: TestPaper, assignedStudentIds: Set<number>) => {
+  const response = await axiosInstance.get('/student-subject-enrollments/teacher/enrolled-students', {
+    params: {
+      schoolId: paper.school!.id,
+      standard_id: paper.pattern!.standard.id,
+      subject_id: paper.pattern!.subject.id,
+    }
+  })
+  const enrolled = Array.isArray(response.data) ? response.data : []
+  students.value = enrolled.map((row: any) => ({
+    id: row.student_id ?? row.student?.id ?? row.id,
+    name: row.student_name ?? row.student?.user?.name ?? row.name ?? 'Unknown',
+    rollNumber: row.student_roll_number ?? row.student?.student_id ?? row.rollNumber ?? '',
+    selected: false,
+    isAssigned: assignedStudentIds.has(row.student_id ?? row.student?.id ?? row.id)
+  }))
+}
+
+// API method to load assignable students (school students or program aspirants)
 const loadEnrolledStudents = async (paper: TestPaper) => {
   try {
     loadingStudents.value = true
-    console.log('Loading ITI students for paper:', paper.name)
-    
-    // Use ITI students API instead of enrolled students API
-    const response = await axiosInstance.get('/iti-mocktest/students', {
-      params: {
-        schoolId: paper.school.id,  // Use school from test paper
-        standardId: paper.pattern.standard.id  // Use standard from test paper pattern
-      }
-    })
-    
-    console.log('API Response - ITI Students found:', response.data?.data?.length || 0)
-    
-    if (response.data && response.data.statusCode === 200 && Array.isArray(response.data.data)) {
-      // Get existing assignments for this paper to determine assignment status
-      let assignedStudentIds = new Set<number>()
-      
-      if (paper.id) {
-        try {
-          const assignmentsResponse = await axiosInstance.get('/test-assignments', {
-            params: {
-              test_paper_id: paper.id
-            }
-          })
-          
-          if (assignmentsResponse.data && Array.isArray(assignmentsResponse.data)) {
-            assignedStudentIds = new Set(assignmentsResponse.data.map((a: any) => a.student_id))
-          }
-        } catch (assignmentError) {
-          console.warn('Could not fetch existing assignments:', assignmentError)
-        }
-      }
-      
-      // Transform ITI students API response to match Student interface
-      students.value = response.data.data.map((itiStudent: any) => ({
-        id: itiStudent.id,  // Use ITI student ID
-        name: itiStudent.user.name,
-        rollNumber: itiStudent.student_id,  // ITI student roll number
-        selected: false,
-        isAssigned: assignedStudentIds.has(itiStudent.id)
-      }))
-      
-      // Filter based on assignedOnlyToggle if needed
-      if (assignedOnlyToggle.value === true) {
-        // Show only assigned students
-        students.value = students.value.filter(student => student.isAssigned)
-      } else if (assignedOnlyToggle.value === false) {
-        // Show only unassigned students  
-        students.value = students.value.filter(student => !student.isAssigned)
-      }
-      // If undefined, show all students with assignment status
-      
-      console.log('Loaded ITI students:', students.value.length)
-    } else {
-      console.warn('Unexpected API response format:', response.data)
-      students.value = []
+    const assignedStudentIds = await fetchAssignedStudentIds(paper.id)
+
+    if (!paper.pattern || !paper.school) {
+      await loadAspirantsForPaper(paper, assignedStudentIds)
+      applyAssignedOnlyFilter()
+      return
     }
+
+    await loadBoardEnrolledStudents(paper, assignedStudentIds)
+    applyAssignedOnlyFilter()
+    console.log('Loaded enrolled students:', students.value.length)
   } catch (error: any) {
-    console.error('Error loading ITI students:', error)
-    
-    // Handle specific error cases
-    if (error.response?.status === 404) {
-      console.error('No ITI students found for this standard and school')
-      students.value = []
-    } else if (error.response?.status === 401) {
+    console.error('Error loading enrolled students:', error)
+    if (error.response?.status === 401) {
       console.error('User not authenticated')
     } else {
-      console.error('Failed to load ITI students')
       students.value = []
     }
   } finally {
@@ -1134,20 +1246,20 @@ const getAllQuestionsFlat = () => {
   
   const allQuestions: Question[] = []
   
-  currentQuestions.value.sections.forEach((section: QuestionSection) => {
-    section.subsections.forEach((subsection: QuestionSubsection) => {
-      subsection.questions.forEach((question: Question) => {
+  for (const section of currentQuestions.value.sections) {
+    for (const subsection of section.subsections) {
+      for (const question of subsection.questions) {
         allQuestions.push(question)
-      })
-    })
-  })
+      }
+    }
+  }
   
   return allQuestions
 }
 
 // New function to get option label (A, B, C, D, etc.)
 const getOptionLabel = (index: number) => {
-  return String.fromCharCode(65 + index) // Returns A, B, C, D, etc.
+  return String.fromCodePoint(65 + index) // Returns A, B, C, D, etc.
 }
 
 const deleteTestPaper = (paper: TestPaper) => {
@@ -1192,9 +1304,9 @@ const confirmDelete = async () => {
 }
 
 const toggleAllStudents = () => {
-  filteredStudents.value.forEach(student => {
+  for (const student of filteredStudents.value) {
     student.selected = selectAllStudents.value
-  })
+  }
 }
 
 const confirmAssignment = async () => {
@@ -1239,10 +1351,10 @@ const executeAssignment = async (selectedStudents: Student[]) => {
       const result = response.data
       
       // Update assignment status for successfully assigned students
-      selectedStudents.forEach(student => {
+      for (const student of selectedStudents) {
         student.isAssigned = true
         student.selected = false
-      })
+      }
       
       // Show success message
       let message = `Test assigned successfully to ${result.assigned || selectedStudents.length} student(s)!`
@@ -1293,9 +1405,9 @@ const filterStudents = async () => {
   // Reset select all when filter changes
   selectAllStudents.value = false
   // Clear all selections when filter changes
-  students.value.forEach(student => {
+  for (const student of students.value) {
     student.selected = false
-  })
+  }
   
   // Reload students with new filter if we have a selected paper
   if (selectedPaper.value) {
@@ -1377,11 +1489,13 @@ const nextMonth = (type: 'due' | 'available') => {
 const getCalendarDates = (type: 'due' | 'available') => {
   const picker = type === 'due' ? dueDatePicker.value : availableDatePicker.value
   const firstDay = new Date(picker.year, picker.month, 1)
-  const lastDay = new Date(picker.year, picker.month + 1, 0)
   const today = new Date()
-  const selectedDate = type === 'due' 
-    ? (assignmentData.value.dueDate ? new Date(assignmentData.value.dueDate) : null)
-    : (assignmentData.value.availableFrom ? new Date(assignmentData.value.availableFrom) : null)
+  let selectedDate: Date | null = null
+  if (type === 'due') {
+    if (assignmentData.value.dueDate) selectedDate = new Date(assignmentData.value.dueDate)
+  } else if (assignmentData.value.availableFrom) {
+    selectedDate = new Date(assignmentData.value.availableFrom)
+  }
   
   const dates = []
   const startDate = new Date(firstDay)
@@ -1529,7 +1643,15 @@ const setQuickTime12 = (timeStr: string) => {
 
 
 // Lifecycle hooks
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const { data } = await axiosInstance.get('/institutions/me/membership')
+    hasActiveOrg.value = data?.status === 'active'
+  } catch {
+    hasActiveOrg.value = false
+  } finally {
+    orgGateChecked.value = true
+  }
   fetchOnlineTestPapers()
   // Add click outside listener for date pickers
   document.addEventListener('click', handleClickOutside)
@@ -1567,9 +1689,53 @@ onUnmounted(() => {
 }
 
 .btn-create:hover {
-  /* Remove transform to prevent position change */
-  /* transform: translateY(-1px); */
   box-shadow: 0 4px 8px rgba(13, 110, 253, 0.3);
+}
+
+/* ===== EXAM CATEGORY TABS ===== */
+.category-tabs {
+  border-bottom: 2px solid #dee2e6;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.category-tabs .nav-link {
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #6c757d;
+  font-weight: 600;
+  padding: 0.6rem 1.25rem;
+  white-space: nowrap;
+  background: transparent;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.category-tabs .nav-link:hover {
+  color: #212529;
+  border-bottom-color: #adb5bd;
+}
+
+.category-tabs .nav-link.active {
+  color: #0d6efd;
+  border-bottom-color: #0d6efd;
+  background: transparent;
+}
+
+.category-tabs .tab-count {
+  display: inline-block;
+  min-width: 1.5rem;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 10px;
+  background: #e9ecef;
+  color: #495057;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.category-tabs .nav-link.active .tab-count {
+  background: #e7f1ff;
+  color: #0d6efd;
 }
 
 /* ===== SEARCH AND FILTER STYLES ===== */
@@ -1655,13 +1821,6 @@ onUnmounted(() => {
   gap: 1.5rem;
 }
 
-/* Remove the responsive grid that creates multiple columns */
-/* @media (min-width: 768px) {
-  .test-papers-grid {
-    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  }
-} */
-
 /* ===== TEST PAPER CARD ===== */
 .test-paper-card {
   background: white;
@@ -1673,8 +1832,6 @@ onUnmounted(() => {
 }
 
 .test-paper-card:hover {
-  /* Remove transform to prevent position change */
-  /* transform: translateY(-2px); */
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
@@ -1691,6 +1848,10 @@ onUnmounted(() => {
   color: #212529;
   margin-bottom: 0.75rem;
   line-height: 1.4;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .card-meta {
@@ -1803,8 +1964,6 @@ onUnmounted(() => {
 }
 
 .btn-action:hover {
-  /* Remove transform to prevent position change */
-  /* transform: translateY(-1px); */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
@@ -1865,8 +2024,6 @@ onUnmounted(() => {
 }
 
 .btn-create-mobile:hover {
-  /* Remove transform to prevent position change */
-  /* transform: translateY(-1px); */
   box-shadow: 0 4px 8px rgba(13, 110, 253, 0.3);
 }
 
@@ -2704,14 +2861,10 @@ onUnmounted(() => {
 /* ===== TOUCH DEVICE OPTIMIZATIONS ===== */
 @media (hover: none) and (pointer: coarse) {
   .test-paper-card:hover {
-    /* Remove transform to prevent position change */
-    /* transform: none; */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
 
   .btn-action:hover {
-    /* Remove transform to prevent position change */
-    /* transform: none; */
     box-shadow: none;
   }
 

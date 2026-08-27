@@ -10,9 +10,47 @@
       <hr />
     </div>
 
+    <!-- Scope: school board / entrance / competitive -->
+    <div class="row p-2 justify-content-center mb-2">
+      <div class="col-12 col-sm-10 col-md-10">
+        <ul class="nav nav-tabs category-tabs">
+          <li class="nav-item">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: syllabusScope === 'board' }"
+              @click="setSyllabusScope('board')"
+            >
+              School Board
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: syllabusScope === 'ENTRANCE' }"
+              @click="setSyllabusScope('ENTRANCE')"
+            >
+              Entrance Exams
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: syllabusScope === 'COMPETITIVE' }"
+              @click="setSyllabusScope('COMPETITIVE')"
+            >
+              Competitive Exams
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
     <!-- Form Section -->
     <div class="row gy-2 g-3 justify-content-center">
-      <form @submit.prevent="handleSubmit" id="viewSyllabusForm">
+      <form v-if="syllabusScope === 'board'" @submit.prevent="handleSubmit" id="viewSyllabusForm">
         <div class="row gy-2 justify-content-center">
           <!-- Board Selection -->
           <div class="col-12 col-sm-10 col-md-8">
@@ -121,15 +159,69 @@
           </div>
         </div>
       </form>
+
+      <form v-else-if="isExamScope" @submit.prevent="handleExamSubmit" id="viewExamSyllabusForm">
+        <div class="row gy-2 justify-content-center">
+          <div class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <SearchableDropdown
+                id="filterExamProgram"
+                label="Exam"
+                :placeholder="examSearchPlaceholder"
+                :items="filteredExamPrograms"
+                v-model="selectedExamProgram"
+                :search-keys="['name', 'label']"
+                label-key="label"
+                required
+                @change="handleExamProgramChange"
+              >
+                <template #label> Exam Program <span class="text-danger">*</span> </template>
+                <template #item="{ item }">
+                  {{ item.label }}
+                </template>
+              </SearchableDropdown>
+            </div>
+          </div>
+          <div v-if="examStages.length" class="col-12 col-sm-10 col-md-8">
+            <div class="mb-3">
+              <label class="form-label fw-bold" for="filterExamStage">Stage <span class="text-danger">*</span></label>
+              <select
+                id="filterExamStage"
+                v-model="selectedExamStageId"
+                class="form-select"
+                required
+              >
+                <option :value="null" disabled>Select stage</option>
+                <option v-for="stage in examStages" :key="stage.id" :value="stage.id">{{ stage.name }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-12 col-sm-10 col-md-8 text-end">
+            <button
+              type="submit"
+              class="btn btn-dark mt-3"
+              :disabled="!selectedExamProgram || (examStages.length > 0 && !selectedExamStageId)"
+            >
+              Manage Syllabus
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
 import axiosInstance from '@/config/axios'
+import { examCatalogService } from '@/services/examCatalogService'
+import type { ExamCategoryCode, ExamProgram, ExamStage } from '@/types/exam'
+import { examSyllabusQueryString } from '@/utils/examSyllabus'
+import { boardSyllabusQueryString } from '@/utils/boardSyllabus'
+
+type SyllabusScope = 'board' | ExamCategoryCode
 
 interface Board {
   id: number
@@ -161,6 +253,13 @@ interface Item {
 }
 
 const router = useRouter()
+const route = useRoute()
+
+const syllabusScope = ref<SyllabusScope>('board')
+const allExamPrograms = ref<Array<ExamProgram & { label: string }>>([])
+const selectedExamProgram = ref<(ExamProgram & { label: string }) | null>(null)
+const examStages = ref<ExamStage[]>([])
+const selectedExamStageId = ref<number | null>(null)
 
 // Form data
 const selectedBoard = ref<BoardDetails | null>(null)
@@ -179,6 +278,20 @@ const boards = ref<Board[]>([])
 const boardMediums = computed(() => selectedBoard.value?.instruction_mediums ?? [])
 const boardStandards = computed(() => selectedBoard.value?.standards ?? [])
 
+const isExamScope = computed(() => syllabusScope.value === 'ENTRANCE' || syllabusScope.value === 'COMPETITIVE')
+
+const filteredExamPrograms = computed(() =>
+  allExamPrograms.value.filter(
+    (program) => program.exam_body?.exam_category?.code === syllabusScope.value,
+  ),
+)
+
+const examSearchPlaceholder = computed(() =>
+  syllabusScope.value === 'ENTRANCE'
+    ? 'Search entrance exam (JEE, NEET...)'
+    : 'Search competitive exam (UPSC, SSC...)',
+)
+
 // Computed
 const isFormValid = computed(() => {
   return (
@@ -187,6 +300,23 @@ const isFormValid = computed(() => {
     validationStates.value.standard.valid
   )
 })
+
+function setSyllabusScope(scope: SyllabusScope) {
+  syllabusScope.value = scope
+  if (scope !== 'board') {
+    if (selectedExamProgram.value?.exam_body?.exam_category?.code !== scope) {
+      selectedExamProgram.value = null
+      selectedExamStageId.value = null
+      examStages.value = []
+    }
+  }
+  router.replace({ query: { scope } })
+}
+
+function resolveExamScope(program?: ExamProgram | null): ExamCategoryCode {
+  const category = program?.exam_body?.exam_category?.code
+  return category === 'ENTRANCE' || category === 'COMPETITIVE' ? category : 'COMPETITIVE'
+}
 
 // Input handlers
 const handleBoardInput = (value: unknown) => {
@@ -208,18 +338,51 @@ const handleStandardInput = (value: unknown) => {
 onMounted(async () => {
   try {
     const response = await axiosInstance.get('/boards')
-    // Check if the response has the new format with pagination
     if (response.data?.data) {
-      // New format with pagination
       boards.value = response.data.data
     } else {
-      // Old format (direct array)
       boards.value = response.data
     }
   } catch (error) {
     console.error('Error fetching boards:', error)
-    // Set boards to empty array to show "No data available" message
     boards.value = []
+  }
+
+  try {
+    const [entrance, competitive] = await Promise.all([
+      examCatalogService.getPrograms({ category: 'ENTRANCE' }),
+      examCatalogService.getPrograms({ category: 'COMPETITIVE' }),
+    ])
+    allExamPrograms.value = [...entrance, ...competitive].map((program) => ({
+      ...program,
+      label: `${program.exam_body?.abbreviation ?? ''} — ${program.name}`.trim(),
+    }))
+  } catch (error) {
+    console.error('Error fetching exam programs:', error)
+    allExamPrograms.value = []
+  }
+
+  const programId = route.query.programId
+  const scope = route.query.scope as string | undefined
+  if (scope === 'ENTRANCE' || scope === 'COMPETITIVE') {
+    syllabusScope.value = scope
+  } else if (scope === 'board') {
+    syllabusScope.value = 'board'
+  }
+
+  if (scope === 'exam' || programId) {
+    const match = allExamPrograms.value.find((p) => String(p.id) === String(programId))
+    if (match) {
+      syllabusScope.value = resolveExamScope(match)
+      selectedExamProgram.value = match
+      await loadExamStages(match.id)
+    } else if (scope === 'exam') {
+      syllabusScope.value = 'COMPETITIVE'
+    }
+    const stageId = route.query.stageId
+    if (stageId) {
+      selectedExamStageId.value = Number(stageId)
+    }
   }
 })
 
@@ -271,9 +434,9 @@ const handleStandardChange = (standard: Item | null) => {
 // Form submission handler
 const handleSubmit = () => {
   // Mark all fields as touched
-  Object.keys(validationStates.value).forEach((key) => {
+  for (const key of Object.keys(validationStates.value)) {
     validationStates.value[key as keyof typeof validationStates.value].touched = true
-  })
+  }
 
   if (!isFormValid.value) {
     return
@@ -282,17 +445,81 @@ const handleSubmit = () => {
   if (selectedBoard.value && selectedMedium.value && selectedStandard.value) {
     router.push({
       name: 'syllabusStandard',
-      query: {
+      query: boardSyllabusQueryString({
         board: selectedBoard.value.id,
         medium: selectedMedium.value.id,
         standard: selectedStandard.value.id,
-      },
+        boardName: selectedBoard.value.name,
+        mediumName: selectedMedium.value.instruction_medium,
+        standardName: selectedStandard.value.name,
+      }),
     })
   }
+}
+
+const handleExamProgramChange = async (program: Item | null) => {
+  selectedExamStageId.value = null
+  examStages.value = []
+  if (program?.id) {
+    await loadExamStages(Number(program.id))
+    if (examStages.value.length === 1) {
+      selectedExamStageId.value = examStages.value[0].id
+    }
+  }
+}
+
+async function loadExamStages(programId: number) {
+  try {
+    examStages.value = await examCatalogService.getStages(programId)
+  } catch {
+    examStages.value = []
+  }
+}
+
+const handleExamSubmit = () => {
+  if (!selectedExamProgram.value) return
+  const stage = examStages.value.find((s) => s.id === selectedExamStageId.value)
+  const query = examSyllabusQueryString({
+    programId: selectedExamProgram.value.id,
+    scope: syllabusScope.value as ExamCategoryCode,
+    programName: selectedExamProgram.value.label,
+    stageId: selectedExamStageId.value,
+    stageName: stage?.name ?? null,
+  })
+  router.push({
+    name: 'examSyllabusSubjects',
+    params: { programId: String(selectedExamProgram.value.id) },
+    query,
+  })
 }
 </script>
 
 <style scoped>
+.category-tabs {
+  border-bottom: 2px solid #dee2e6;
+}
+
+.category-tabs .nav-link {
+  color: #495057;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  background: transparent;
+}
+
+.category-tabs .nav-link:hover {
+  color: #212529;
+  border-bottom-color: #adb5bd;
+}
+
+.category-tabs .nav-link.active {
+  color: #212529;
+  font-weight: 600;
+  border-bottom-color: #212529;
+  background: transparent;
+}
+
 /* Default styles for screens above 576px */
 .dynamic-style {
   position: static;

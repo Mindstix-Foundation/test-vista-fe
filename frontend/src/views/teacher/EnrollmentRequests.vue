@@ -14,7 +14,7 @@
                   @click="refreshData"
                   :disabled="loading"
                 >
-                  <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
+                  <output v-if="loading" class="spinner-border spinner-border-sm me-2"></output>
                   <i v-else class="bi bi-arrow-clockwise me-1"></i>
                   Refresh
                 </button>
@@ -26,8 +26,8 @@
               <div class="p-4 border-bottom bg-light">
                 <div class="row g-3">
                   <div class="col-md-4">
-                    <label class="form-label">Status Filter:</label>
-                    <select class="form-select" v-model="filters.status" @change="fetchEnrollmentRequests">
+                    <label class="form-label" for="enrollment-status-filter">Status Filter:</label>
+                    <select id="enrollment-status-filter" class="form-select" v-model="filters.status" @change="fetchEnrollmentRequests">
                       <option value="">All Statuses</option>
                       <option value="pending">Pending</option>
                       <option value="approved">Approved</option>
@@ -36,8 +36,8 @@
                     </select>
                   </div>
                   <div class="col-md-4">
-                    <label class="form-label">Academic Year:</label>
-                    <select class="form-select" v-model="filters.academic_year" @change="fetchEnrollmentRequests">
+                    <label class="form-label" for="enrollment-year-filter">Academic Year:</label>
+                    <select id="enrollment-year-filter" class="form-select" v-model="filters.academic_year" @change="fetchEnrollmentRequests">
                       <option value="">All Years</option>
                       <option v-for="year in academicYears" :key="year" :value="year">
                         {{ year }}
@@ -45,8 +45,8 @@
                     </select>
                   </div>
                   <div class="col-md-4">
-                    <label class="form-label">Subject:</label>
-                    <select class="form-select" v-model="filters.subject" @change="fetchEnrollmentRequests">
+                    <label class="form-label" for="enrollment-subject-filter">Subject:</label>
+                    <select id="enrollment-subject-filter" class="form-select" v-model="filters.subject" @change="fetchEnrollmentRequests">
                       <option value="">All Subjects</option>
                       <option v-for="subject in subjects" :key="subject" :value="subject">
                         {{ subject }}
@@ -90,9 +90,9 @@
               <div class="p-4">
                 <!-- Loading State -->
                 <div v-if="loading" class="text-center py-4">
-                  <div class="spinner-border text-primary" role="status">
+                  <output class="spinner-border text-primary">
                     <span class="visually-hidden">Loading...</span>
-                  </div>
+                  </output>
                   <p class="mt-2 text-muted">Loading enrollment requests...</p>
                 </div>
 
@@ -224,18 +224,18 @@
           <div class="modal-body">
             <div v-if="selectedRequest">
               <div class="mb-3">
-                <label class="form-label fw-bold">Student:</label>
+                <div class="form-label fw-bold">Student:</div>
                 <p class="mb-1">{{ selectedRequest.student.user.name }}</p>
                 <small class="text-muted">{{ selectedRequest.student.user.email_id }}</small>
               </div>
               
               <div class="mb-3">
-                <label class="form-label fw-bold">Subject:</label>
+                <div class="form-label fw-bold">Subject:</div>
                 <p class="mb-1">{{ selectedRequest.teacher_subject.subject.name }}</p>
               </div>
 
               <div v-if="selectedRequest.request_message" class="mb-3">
-                <label class="form-label fw-bold">Student Message:</label>
+                <div class="form-label fw-bold">Student Message:</div>
                 <p class="p-2 bg-light rounded mb-1">{{ selectedRequest.request_message }}</p>
               </div>
 
@@ -265,7 +265,7 @@
               @click="submitResponse"
               :disabled="!canSubmitResponse"
             >
-              <span v-if="processing" class="spinner-border spinner-border-sm me-2"></span>
+              <output v-if="processing" class="spinner-border spinner-border-sm me-2"></output>
               {{ getActionTitle(selectedAction) }}
             </button>
           </div>
@@ -406,7 +406,7 @@ const openResponseModal = (request: EnrollmentRequest, action: 'approved' | 'rej
   responseForm.status = action
   responseForm.teacher_response = ''
   
-  const modal = new (window as any).bootstrap.Modal(document.getElementById('responseModal'))
+  const modal = new (globalThis as any).bootstrap.Modal(document.getElementById('responseModal'))
   modal.show()
 }
 
@@ -423,7 +423,7 @@ const submitResponse = async () => {
     await axiosInstance.put(`/student-subject-enrollments/${selectedRequest.value.id}/status`, responseForm)
     
     // Close modal
-    const modal = (window as any).bootstrap.Modal.getInstance(document.getElementById('responseModal'))
+    const modal = (globalThis as any).bootstrap.Modal.getInstance(document.getElementById('responseModal'))
     modal.hide()
     
     // Refresh data
@@ -512,7 +512,7 @@ const showToast = (title: string, message: string, icon: string) => {
   toastMessage.value = message
   toastIcon.value = icon
   
-  const toast = new (window as any).bootstrap.Toast(document.getElementById('notificationToast'))
+  const toast = new (globalThis as any).bootstrap.Toast(document.getElementById('notificationToast'))
   toast.show()
 }
 

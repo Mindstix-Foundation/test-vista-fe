@@ -161,7 +161,7 @@
                   @click="changeAllQuestions"
                   :disabled="isChangingQuestions"
                 >
-                  <span v-if="isChangingQuestions" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                  <output v-if="isChangingQuestions" class="spinner-border spinner-border-sm me-1"></output>
                   <i v-else class="bi bi-arrow-clockwise me-1"></i>
                   New Set
                 </button>
@@ -171,7 +171,7 @@
                   @click="shuffleQuestions"
                   :disabled="isShuffling"
                 >
-                  <span v-if="isShuffling" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                  <output v-if="isShuffling" class="spinner-border spinner-border-sm me-1"></output>
                   <i v-else class="bi bi-shuffle me-1"></i>
                   Shuffle
                 </button>
@@ -188,6 +188,18 @@
                   <div class="d-flex w-100">
                     <!-- Question Content -->
                     <div class="question-content">
+                      <div
+                        v-if="
+                          question.question.question_group?.passage_text &&
+                          question.question.group_order === 1
+                        "
+                        class="passage-preview"
+                      >
+                        <div class="passage-preview-label">Passage</div>
+                        <div class="passage-preview-text">
+                          {{ question.question.question_group.passage_text }}
+                        </div>
+                      </div>
                       <div class="question-text">
                         {{ questionIndex + 1 }}. {{ question.question.question_texts[0]?.question_text || 'No question text available' }}
                         <span v-if="question.chapterName" class="chapter-badge">
@@ -228,7 +240,12 @@
                           type="button"
                           class="btn btn-sm btn-custom shuffle-button" 
                           @click.prevent="changeQuestion(questionIndex)"
-                          :disabled="isChangingQuestions"
+                          :disabled="isChangingQuestions || !!question.question.question_group_id"
+                          :title="
+                            question.question.question_group_id
+                              ? 'Passage-linked questions can only be changed as a complete group'
+                              : 'Change question'
+                          "
                         >
                           <span class="d-inline-flex align-items-center">
                             <i class="bi bi-arrow-clockwise me-md-1"></i>
@@ -263,9 +280,9 @@
               @click="handleButtonClick"
             >
               <span v-if="isSubmitting" class="loading-content">
-                <span class="spinner-border spinner-border-sm me-2" role="status">
+                <output class="spinner-border spinner-border-sm me-2">
                   <span class="visually-hidden">Loading...</span>
-                </span>
+                </output>
                 <span class="loading-text">Creating Test Paper...</span>
               </span>
               <span v-else class="normal-content">
@@ -298,190 +315,7 @@
       </div>
     </div>
 
-    <!-- Questions Distribution Section -->
-    <!-- Removed Questions Distribution Preview section as requested by user -->
-    <!--
-    <div v-if="showDistribution && questionsDistribution" class="row p-2 justify-content-center mb-3">
-      <div class="col-12 col-sm-10">
-        <div class="questions-distribution-container">
-          <h6 class="fw-semibold mb-3">Questions Distribution Preview</h6>
-          
-          <div class="row mb-4">
-            <div class="col-md-3 col-sm-6 mb-3">
-              <div class="summary-card">
-                <div class="summary-icon">
-                  <i class="bi bi-list-ol"></i>
-                </div>
-                <div class="summary-content">
-                  <h6>Total Questions</h6>
-                  <span class="summary-value">{{ getTotalQuestions() }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-3 col-sm-6 mb-3">
-              <div class="summary-card">
-                <div class="summary-icon">
-                  <i class="bi bi-award"></i>
-                </div>
-                <div class="summary-content">
-                  <h6>Total Marks</h6>
-                  <span class="summary-value">{{ questionsDistribution.totalMarks || questionsDistribution.absoluteMarks || totalMarksFromPrevious }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-3 col-sm-6 mb-3">
-              <div class="summary-card">
-                <div class="summary-icon">
-                  <i class="bi bi-book"></i>
-                </div>
-                <div class="summary-content">
-                  <h6>Chapters</h6>
-                  <span class="summary-value">{{ questionsDistribution.chapterMarks?.length || 0 }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-3 col-sm-6 mb-3">
-              <div class="summary-card">
-                <div class="summary-icon">
-                  <i class="bi bi-grid-3x3-gap"></i>
-                </div>
-                <div class="summary-content">
-                  <h6>Sections</h6>
-                  <span class="summary-value">{{ questionsDistribution.sectionAllocations?.length || 0 }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div v-if="questionsDistribution.chapterMarks" class="mb-4">
-            <h6 class="fw-semibold mb-3">Chapter-wise Distribution</h6>
-            <div class="table-responsive">
-              <table class="table table-striped">
-                <thead class="table-dark">
-                  <tr>
-                    <th>Chapter</th>
-                    <th class="text-center">Questions</th>
-                    <th class="text-center">Marks</th>
-                    <th class="text-center">Percentage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="chapter in questionsDistribution.chapterMarks" :key="chapter.chapterId">
-                    <td>
-                      <strong>{{ chapter.chapterName }}</strong>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-primary">{{ chapter.questionCount || 0 }}</span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-success">{{ chapter.absoluteMarks || 0 }}</span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-info">{{ chapter.percentage || 0 }}%</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div v-if="questionsDistribution.sectionAllocations" class="mb-4">
-            <h6 class="fw-semibold mb-3">Section-wise Distribution</h6>
-            <div class="table-responsive">
-              <table class="table table-striped">
-                <thead class="table-dark">
-                  <tr>
-                    <th>Section</th>
-                    <th class="text-center">Question Types</th>
-                    <th class="text-center">Questions</th>
-                    <th class="text-center">Marks per Question</th>
-                    <th class="text-center">Total Marks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="section in questionsDistribution.sectionAllocations" :key="section.sectionId">
-                    <td>
-                      <strong>Q.{{ section.section_number }}</strong>
-                      {{ section.subSection ? section.subSection + ')' : '' }}
-                      {{ section.sectionName }}
-                    </td>
-                    <td class="text-center">
-                      <div v-if="section.subsectionAllocations" class="d-flex flex-wrap gap-1 justify-content-center">
-                        <span 
-                          v-for="subsection in section.subsectionAllocations" 
-                          :key="subsection.subsectionQuestionTypeId"
-                          class="badge bg-secondary"
-                        >
-                          {{ subsection.questionTypeName }}
-                        </span>
-                      </div>
-                      <span v-else class="badge bg-secondary">-</span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-primary">{{ section.mandotory_questions || section.totalQuestions || 0 }}</span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-warning text-dark">{{ section.marks_per_question || 0 }}</span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-success">{{ section.absoluteMarks || section.totalMarks || 0 }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            
-            <div v-for="section in questionsDistribution.sectionAllocations" :key="'details-' + section.sectionId" class="mt-4">
-              <div v-if="section.subsectionAllocations && section.subsectionAllocations.length > 0">
-                <h6 class="fw-semibold text-primary">
-                  Section {{ section.section_number }}{{ section.subSection ? section.subSection : '' }} - Question Type Details
-                </h6>
-                <div class="table-responsive">
-                  <table class="table table-sm table-bordered">
-                    <thead class="table-light">
-                      <tr>
-                        <th>Question Type</th>
-                        <th class="text-center">Allocated Chapters</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="subsection in section.subsectionAllocations" :key="subsection.subsectionQuestionTypeId">
-                        <td>
-                          <strong>{{ subsection.questionTypeName }}</strong>
-                        </td>
-                        <td class="text-center">
-                          <div v-if="subsection.allocatedChapters" class="d-flex flex-wrap gap-1 justify-content-center">
-                            <span 
-                              v-for="chapter in subsection.allocatedChapters" 
-                              :key="chapter.chapterId"
-                              class="badge bg-info"
-                            >
-                              {{ chapter.chapterName }}
-                            </span>
-                          </div>
-                          <span v-else class="text-muted">-</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-4">
-            <details>
-              <summary class="fw-semibold text-muted" style="cursor: pointer;">
-                <i class="bi bi-code-square me-1"></i>
-                View Raw Data (Debug)
-              </summary>
-              <pre class="bg-light p-3 mt-2 rounded"><code>{{ JSON.stringify(questionsDistribution, null, 2) }}</code></pre>
-            </details>
-          </div>
-        </div>
-      </div>
-    </div>
-    -->
 
     <!-- Toast Notification -->
     <ToastNotification
@@ -615,7 +449,7 @@ const handleFormSubmit = async () => {
     // Prepare the test paper data
     const testPaperData = {
       name: form.value.testPaperName.trim(),
-      pattern_id: parseInt(patternId),
+      pattern_id: Number.parseInt(patternId),
       duration_minutes: form.value.duration,
       instructions: form.value.instructions.trim() || null,
       negative_marking: form.value.negativeMarking,
@@ -623,10 +457,10 @@ const handleFormSubmit = async () => {
       randomize_questions: form.value.randomizeQuestions,
       randomize_options: form.value.randomizeOptions,
       // Add other query parameters for context
-      board_id: route.query.boardId ? parseInt(route.query.boardId as string) : null,
+      board_id: route.query.boardId ? Number.parseInt(route.query.boardId as string) : null,
       medium_ids: route.query.mediumId,
-      standard_id: route.query.standardId ? parseInt(route.query.standardId as string) : null,
-      subject_id: route.query.subjectId ? parseInt(route.query.subjectId as string) : null,
+      standard_id: route.query.standardId ? Number.parseInt(route.query.standardId as string) : null,
+      subject_id: route.query.subjectId ? Number.parseInt(route.query.subjectId as string) : null,
       chapters: parseChaptersFromQuery(),
       question_source: route.query.questionSource || 'both',
       questions_data: questionsData
@@ -693,6 +527,22 @@ const handleFormSubmit = async () => {
 }
 
 // New function to prepare questions data from the distribution
+const buildSubsectionQuestions = (subsection: any, marksPerQuestion: number) => {
+  const questions: any[] = []
+  let questionOrder = 1
+  for (const chapter of subsection.allocatedChapters) {
+    if (!chapter.question) continue
+    questions.push({
+      question_id: chapter.question.id,
+      question_text_id: chapter.question.question_texts?.[0]?.id,
+      chapter_id: chapter.chapterId,
+      marks: marksPerQuestion || chapter.marks || 1,
+      question_order: questionOrder++,
+    })
+  }
+  return questions
+}
+
 const prepareQuestionsData = () => {
   if (!questionsDistribution.value || !questionsDistribution.value.sectionAllocations) {
     return []
@@ -700,41 +550,26 @@ const prepareQuestionsData = () => {
 
   const questionsData: any[] = []
   
-  questionsDistribution.value.sectionAllocations.forEach((section: any) => {
+  for (const section of questionsDistribution.value.sectionAllocations) {
     const sectionData = {
       section_id: section.sectionId,
       subsections: [] as any[]
     }
     
-    section.subsectionAllocations.forEach((subsection: any) => {
-      const subsectionData = {
-        subsection_question_type_id: subsection.subsectionQuestionTypeId,
-        questions: [] as any[]
+    for (const subsection of section.subsectionAllocations) {
+      const questions = buildSubsectionQuestions(subsection, section.marks_per_question)
+      if (questions.length > 0) {
+        sectionData.subsections.push({
+          subsection_question_type_id: subsection.subsectionQuestionTypeId,
+          questions,
+        })
       }
-      
-      let questionOrder = 1
-      subsection.allocatedChapters.forEach((chapter: any) => {
-        if (chapter.question) {
-          const questionData = {
-            question_id: chapter.question.id,
-            question_text_id: chapter.question.question_texts?.[0]?.id,
-            chapter_id: chapter.chapterId,
-            marks: section.marks_per_question || chapter.marks || 1,
-            question_order: questionOrder++
-          }
-          subsectionData.questions.push(questionData)
-        }
-      })
-      
-      if (subsectionData.questions.length > 0) {
-        sectionData.subsections.push(subsectionData)
-      }
-    })
+    }
     
     if (sectionData.subsections.length > 0) {
       questionsData.push(sectionData)
     }
-  })
+  }
   
   console.log('Prepared questions data:', questionsData)
   return questionsData
@@ -827,18 +662,92 @@ const getAllQuestions = () => {
   
   const allQuestions: any[] = []
   
-  questionsDistribution.value.sectionAllocations.forEach((section: any) => {
-    section.subsectionAllocations.forEach((subsection: any) => {
-      subsection.allocatedChapters.forEach((chapter: any) => {
+  for (const section of questionsDistribution.value.sectionAllocations) {
+    for (const subsection of section.subsectionAllocations) {
+      for (const chapter of subsection.allocatedChapters) {
         allQuestions.push({
           chapterName: chapter.chapterName,
           question: chapter.question
         })
-      })
-    })
-  })
+      }
+    }
+  }
   
   return allQuestions
+}
+
+const resolveChapterIdFromQuestion = (questionData: any, question: any): number | undefined => {
+  let chapterId = questionData.chapterId
+  if (chapterId) return chapterId
+  if (question.question_topics?.[0]) {
+    chapterId = question.question_topics[0].topic?.chapter_id
+    if (chapterId) return chapterId
+  }
+  if (!question.question_texts?.[0]?.question_text_topics?.[0]) return chapterId
+  const questionTextTopic = question.question_texts[0].question_text_topics[0]
+  return questionTextTopic.question_topic?.topic?.chapter_id ||
+    questionTextTopic.question_topic?.chapter_id ||
+    questionTextTopic.chapter_id
+}
+
+const findChapterIdAtIndex = (index: number): number | undefined => {
+  if (!questionsDistribution.value?.sectionAllocations) return undefined
+  let currentIndex = 0
+  for (const section of questionsDistribution.value.sectionAllocations) {
+    for (const subsection of section.subsectionAllocations) {
+      for (const chapter of subsection.allocatedChapters) {
+        if (currentIndex === index) return chapter.chapterId
+        currentIndex++
+      }
+    }
+  }
+  return undefined
+}
+
+const resolveChangeQuestionChapterId = (questionData: any, question: any, index: number) => {
+  let chapterId = resolveChapterIdFromQuestion(questionData, question)
+  if (!chapterId) {
+    chapterId = findChapterIdAtIndex(index)
+  }
+  if (chapterId) return chapterId
+  if (questionsDistribution.value?.chapterMarks?.[0]?.chapterId) {
+    return questionsDistribution.value.chapterMarks[0].chapterId
+  }
+  throw new Error('Chapter ID not available for this question. Please check the question data structure.')
+}
+
+const replaceQuestionAtIndex = (index: number, newQuestion: any): boolean => {
+  if (!questionsDistribution.value?.sectionAllocations) return false
+  let currentIndex = 0
+  for (const section of questionsDistribution.value.sectionAllocations) {
+    for (const subsection of section.subsectionAllocations) {
+      for (const chapter of subsection.allocatedChapters) {
+        if (currentIndex === index) {
+          chapter.question = newQuestion
+          localStorage.setItem('finalQuestionsDistribution', JSON.stringify(questionsDistribution.value))
+          return true
+        }
+        currentIndex++
+      }
+    }
+  }
+  return false
+}
+
+const buildChangeQuestionQuery = (
+  questionTextIds: number[],
+  chapterId: number,
+) => {
+  const queryParams = new URLSearchParams()
+  for (const id of questionTextIds) {
+    queryParams.append('questionTextIds', id.toString())
+  }
+  queryParams.append('chapterId', chapterId.toString())
+  queryParams.append('questionOrigin', 'both')
+  if (mediumId) {
+    queryParams.append('mediumIds', mediumId)
+  }
+  return queryParams
 }
 
 // New function to change a question
@@ -859,145 +768,27 @@ const changeQuestion = async (index: number) => {
     
     const questionData = allQuestions[index]
     const question = questionData.question
-    
-    console.log('Question data:', questionData)
-    console.log('Question object:', question)
-    
-    // Get the question text ID from the current question
     const questionTextId = question.question_texts?.[0]?.id
     if (!questionTextId) {
       throw new Error('No question text ID available')
     }
     
-    // Get question type ID
     const questionTypeId = question.question_type_id
     if (!questionTypeId) {
       throw new Error('No question type ID available')
     }
     
-    // Get chapter ID - try multiple sources
-    let chapterId = questionData.chapterId
-    console.log('Initial chapterId from questionData:', chapterId)
-    
-    if (!chapterId && question.question_topics?.[0]) {
-      chapterId = question.question_topics[0].topic?.chapter_id
-      console.log('ChapterId from question_topics[0].topic.chapter_id:', chapterId)
-    }
-    
-    if (!chapterId && question.question_texts?.[0]?.question_text_topics?.[0]) {
-      const questionTextTopic = question.question_texts[0].question_text_topics[0]
-      console.log('Question text topic:', questionTextTopic)
-      
-      // Try different paths for chapter ID
-      chapterId = questionTextTopic.question_topic?.topic?.chapter_id ||
-                  questionTextTopic.question_topic?.chapter_id ||
-                  questionTextTopic.chapter_id
-      console.log('ChapterId from question_text_topics:', chapterId)
-    }
-    
-    // Try to get chapter ID from the questionsDistribution structure
-    if (!chapterId && questionsDistribution.value?.sectionAllocations) {
-      console.log('Trying to find chapter ID from questionsDistribution structure...')
-      let currentIndex = 0
-      
-      for (const section of questionsDistribution.value.sectionAllocations) {
-        for (const subsection of section.subsectionAllocations) {
-          for (const chapter of subsection.allocatedChapters) {
-            if (currentIndex === index) {
-              chapterId = chapter.chapterId
-              console.log('Found chapterId from questionsDistribution:', chapterId)
-              break
-            }
-            currentIndex++
-          }
-          if (chapterId) break
-        }
-        if (chapterId) break
-      }
-    }
-    
-    console.log('Final chapterId:', chapterId)
-    
-    if (!chapterId) {
-      // As a fallback, try to use any chapter ID from the current distribution
-      if (questionsDistribution.value?.chapterMarks?.[0]?.chapterId) {
-        chapterId = questionsDistribution.value.chapterMarks[0].chapterId
-        console.log('Using fallback chapterId from first chapter in distribution:', chapterId)
-      } else {
-        throw new Error('Chapter ID not available for this question. Please check the question data structure.')
-      }
-    }
-    
-    // *** KEY CHANGE: Collect all question text IDs from same chapter and question type ***
+    const chapterId = resolveChangeQuestionChapterId(questionData, question, index)
     const questionTextIds = collectQuestionTextIds(questionTextId, questionTypeId, chapterId)
-    console.log('Collected question text IDs to exclude:', questionTextIds)
+    const queryParams = buildChangeQuestionQuery(questionTextIds, chapterId)
     
-    // Prepare query parameters
-    const queryParams = new URLSearchParams()
-    
-    // Add all question text IDs (this prevents getting duplicate questions)
-    questionTextIds.forEach(id => {
-      queryParams.append('questionTextIds', id.toString())
-    })
-    
-    queryParams.append('chapterId', chapterId.toString())
-    queryParams.append('questionOrigin', 'both')
-    
-    // Add medium IDs
-    if (mediumId) {
-      queryParams.append('mediumIds', mediumId)
-    }
-    
-    console.log('=== ABOUT TO CALL CHANGE QUESTION API ===')
-    console.log('Endpoint: /chapter-marks-distribution/change-question')
-    console.log('Change question parameters:', {
-      questionTextIds,
-      chapterId,
-      mediumId,
-      questionOrigin: 'both'
-    })
-    console.log('Full URL:', `/chapter-marks-distribution/change-question?${queryParams.toString()}`)
-    
-    // Make the API call
     const response = await axiosInstance.get(`/chapter-marks-distribution/change-question?${queryParams.toString()}`)
-    
-    console.log('=== CHANGE QUESTION API RESPONSE ===')
-    console.log('Response:', response.data)
-    
     if (!response.data?.question) {
-      console.error('Unexpected API response format:', response.data)
       throw new Error('Failed to get replacement question')
     }
     
-    const newQuestion = response.data.question
-    
-    // Update the question in questionsDistribution
-    if (questionsDistribution.value?.sectionAllocations) {
-      let currentIndex = 0
-      let found = false
-      
-      // Find and replace the question in the nested structure
-      for (const section of questionsDistribution.value.sectionAllocations) {
-        for (const subsection of section.subsectionAllocations) {
-          for (const chapter of subsection.allocatedChapters) {
-            if (currentIndex === index) {
-              chapter.question = newQuestion
-              found = true
-              break
-            }
-            currentIndex++
-          }
-          if (found) break
-        }
-        if (found) break
-      }
-      
-      // Update localStorage with the new data
-      localStorage.setItem('finalQuestionsDistribution', JSON.stringify(questionsDistribution.value))
-    }
-
+    replaceQuestionAtIndex(index, response.data.question)
     console.log('Question successfully changed!')
-    
   } catch (error) {
     console.error('Error changing question:', error)
     const err: any = error
@@ -1072,6 +863,37 @@ const shuffleArray = <T>(array: T[]): T[] => {
   return shuffled
 }
 
+const resolveAllocatedQuestionChapterId = (chapter: any, question: any) => {
+  let questionChapterId = chapter.chapterId
+  if (!questionChapterId && question.question_topics?.[0]) {
+    questionChapterId = question.question_topics[0].topic?.chapter_id
+  }
+  if (!questionChapterId && question.question_texts?.[0]?.question_text_topics?.[0]) {
+    const questionTextTopic = question.question_texts[0].question_text_topics[0]
+    questionChapterId = questionTextTopic.question_topic?.topic?.chapter_id ||
+                       questionTextTopic.question_topic?.chapter_id ||
+                       questionTextTopic.chapter_id
+  }
+  return questionChapterId
+}
+
+const maybeCollectQuestionTextId = (
+  chapter: any,
+  currentQuestionTextId: number,
+  questionTypeId: number,
+  chapterId: number,
+  questionTextIds: number[],
+) => {
+  const question = chapter.question
+  if (!question?.question_texts?.length) return
+  const questionTextId = question.question_texts[0].id
+  if (questionTextId === currentQuestionTextId) return
+  if (question.question_type_id !== questionTypeId) return
+  if (resolveAllocatedQuestionChapterId(chapter, question) === chapterId) {
+    questionTextIds.push(questionTextId)
+    console.log(`Added question text ID ${questionTextId} from same chapter ${chapterId}`)
+  }
+}
 // *** NEW FUNCTION: Collect all question text IDs from same chapter and question type ***
 const collectQuestionTextIds = (
   currentQuestionTextId: number,
@@ -1091,48 +913,16 @@ const collectQuestionTextIds = (
     return questionTextIds
   }
   
-  // Loop through all questions in the distribution
   for (const section of questionsDistribution.value.sectionAllocations) {
     for (const subsection of section.subsectionAllocations) {
       for (const chapter of subsection.allocatedChapters) {
-        const question = chapter.question
-        
-        // Skip if no question or no question texts
-        if (!question || !question.question_texts || question.question_texts.length === 0) {
-          continue
-        }
-        
-        // Skip the current question
-        const questionTextId = question.question_texts[0].id
-        if (questionTextId === currentQuestionTextId) {
-          continue
-        }
-        
-        // Only consider questions with the same question type
-        if (question.question_type_id !== questionTypeId) {
-          continue
-        }
-        
-        // Get the chapter ID for this question
-        let questionChapterId = chapter.chapterId
-        
-        // Try to get chapter ID from question if not available in chapter
-        if (!questionChapterId && question.question_topics?.[0]) {
-          questionChapterId = question.question_topics[0].topic?.chapter_id
-        }
-        
-        if (!questionChapterId && question.question_texts?.[0]?.question_text_topics?.[0]) {
-          const questionTextTopic = question.question_texts[0].question_text_topics[0]
-          questionChapterId = questionTextTopic.question_topic?.topic?.chapter_id ||
-                             questionTextTopic.question_topic?.chapter_id ||
-                             questionTextTopic.chapter_id
-        }
-        
-        // Only include questions from the same chapter
-        if (questionChapterId === chapterId) {
-          questionTextIds.push(questionTextId)
-          console.log(`Added question text ID ${questionTextId} from same chapter ${chapterId}`)
-        }
+        maybeCollectQuestionTextId(
+          chapter,
+          currentQuestionTextId,
+          questionTypeId,
+          chapterId,
+          questionTextIds,
+        )
       }
     }
   }
@@ -1182,7 +972,7 @@ const changeAllQuestions = async () => {
 
 // New function to get option label
 const getOptionLabel = (index: number) => {
-  return String.fromCharCode(65 + index) // Returns A, B, C, D, etc.
+  return String.fromCodePoint(65 + index) // Returns A, B, C, D, etc.
 }
 
 // New function to parse chapters from query
@@ -1537,6 +1327,28 @@ pre code {
 
 .question-content {
   flex: 1;
+}
+
+.passage-preview {
+  background: #f4f7fb;
+  border: 1px solid #d7e3f4;
+  border-left: 4px solid #0d6efd;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+}
+
+.passage-preview-label {
+  color: #0d6efd;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.passage-preview-text {
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .question-text {
@@ -2099,38 +1911,5 @@ pre code {
 .container.page-leaving {
   opacity: 0;
   transform: translateY(-10px);
-}
-
-/* Enhanced loading overlay with faster transitions */
-.form-loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeInOverlay 0.2s ease-out;
-  transition: opacity 0.3s ease-out;
-}
-
-.form-loading-overlay.success {
-  background: rgba(240, 253, 244, 0.95);
-  backdrop-filter: blur(12px);
-}
-
-@keyframes fadeInOverlay {
-  from {
-    opacity: 0;
-    backdrop-filter: blur(0px);
-  }
-  to {
-    opacity: 1;
-    backdrop-filter: blur(8px);
-  }
 }
 </style> 

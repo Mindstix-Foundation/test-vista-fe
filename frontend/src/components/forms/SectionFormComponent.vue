@@ -200,8 +200,8 @@
         <legend class="float-none w-auto">Select Question Type &nbsp;</legend>
 
         <div class="row g-2 justify-content-center">
-          <!-- Same Type Checkbox -->
-          <div class="col col-12 mb-3 ms-5">
+          <!-- Same Type Checkbox (board patterns only) -->
+          <div v-if="!forceExamSameType" class="col col-12 mb-3 ms-5">
             <div class="form-check">
               <input
                 class="form-check-input"
@@ -215,15 +215,30 @@
             </div>
           </div>
 
+          <!-- Locked MCQ for Online MCQ exam patterns -->
+          <div v-if="questionTypeLocked" class="col col-12">
+            <div class="form-floating mb-3">
+              <input
+                type="text"
+                class="form-control bg-light"
+                id="lockedQuestionType"
+                :value="MCQ_TYPE_NAME"
+                readonly
+                tabindex="-1"
+              />
+              <label for="lockedQuestionType">Question Type</label>
+            </div>
+          </div>
+
           <!-- Single Question Type Input (when sameType is true) -->
-          <div class="col col-12" v-if="formData.sameType">
+          <div class="col col-12" v-else-if="formData.sameType">
             <div class="input-group mb-3">
               <span class="input-group-text">#</span>
               <SearchableDropdown
                 id="questionType"
                 label="Question Type"
                 placeholder="Search for Question Type"
-                :items="questionTypes"
+                :items="availableQuestionTypes"
                 v-model="selectedQuestionType"
                 :search-keys="['type_name']"
                 label-key="type_name"
@@ -249,7 +264,7 @@
                 :id="'questionType' + index"
                 :label="'Question Type ' + (index + 1)"
                 placeholder="Search for Question Type"
-                :items="questionTypes"
+                :items="availableQuestionTypes"
                 v-model="selectedQuestionTypes[index]"
                 :search-keys="['type_name']"
                 label-key="type_name"
@@ -282,6 +297,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
 import axiosInstance from '@/config/axios'
 import { VALIDATION_MESSAGES } from '@/utils/validationConstants'
+import {
+  MCQ_TYPE_NAME,
+  type ExamDeliveryMode,
+  getAllowedExamQuestionTypeNames,
+  isExamQuestionTypeLocked,
+  shouldForceSameQuestionTypePerSection,
+} from '@/utils/examPatternSection'
 
 export interface SectionFormData {
   questionNumber: string
@@ -305,6 +327,8 @@ interface Props {
   totalPatternMarks: number
   disabled?: boolean
   remainingMarks?: number
+  /** When set (exam pattern flow), filters and presets question types by delivery mode. */
+  examDeliveryMode?: ExamDeliveryMode | null
   initialSectionData?: {
     questionNumber: string
     subQuestion: string
@@ -321,6 +345,18 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   remainingMarks: 0,
+  examDeliveryMode: null,
+})
+
+const questionTypeLocked = computed(() => isExamQuestionTypeLocked(props.examDeliveryMode))
+const forceExamSameType = computed(() =>
+  shouldForceSameQuestionTypePerSection(props.examDeliveryMode),
+)
+
+const availableQuestionTypes = computed(() => {
+  const allowed = getAllowedExamQuestionTypeNames(props.examDeliveryMode)
+  if (!allowed) return questionTypes.value
+  return questionTypes.value.filter((qt) => allowed.includes(qt.type_name))
 })
 
 // Emits
@@ -374,6 +410,34 @@ const selectedQuestionTypes = ref<(QuestionType | null)[]>([])
 
 // Add questionTypeTouched array to track touched state for individual question types
 const questionTypeTouched = ref<boolean[]>([])
+
+const selectQuestionTypeByName = (typeName: string) => {
+  const match = availableQuestionTypes.value.find((qt) => qt.type_name === typeName)
+  if (!match) return
+  selectedQuestionType.value = match
+  formData.value.questionType = match.type_name
+  validationStates.value.questionType.valid = true
+  validationStates.value.questionType.touched = true
+}
+
+const applyExamQuestionTypeDefaults = () => {
+  if (!props.examDeliveryMode) return
+
+  if (forceExamSameType.value) {
+    formData.value.sameType = true
+  }
+
+  if (questionTypeLocked.value) {
+    selectQuestionTypeByName(MCQ_TYPE_NAME)
+  } else if (
+    props.examDeliveryMode === 'ONLINE_MIXED' &&
+    !props.initialSectionData?.questionType &&
+    !formData.value.questionType
+  ) {
+    validationStates.value.questionType.valid = false
+    validationStates.value.questionType.touched = false
+  }
+}
 
 // Fetch question types
 const fetchQuestionTypes = async () => {
@@ -430,7 +494,7 @@ onMounted(async () => {
     
     // Initialize touched state for individual question types if not using same type
     if (!formData.value.sameType) {
-      questionTypeTouched.value = Array(props.initialSectionData.questionTypes.length).fill(true)
+      questionTypeTouched.value = new Array(props.initialSectionData.questionTypes.length).fill(true)
     }
 
     // Now that question types are loaded, set the selected type
@@ -448,7 +512,7 @@ onMounted(async () => {
         console.log('Setting selectedQuestionType to:', matchingType)
         selectedQuestionType.value = matchingType
         formData.value.questionType = matchingType.type_name
-        formData.value.questionTypes = Array(Number(formData.value.totalQuestions)).fill(
+        formData.value.questionTypes = new Array(Number(formData.value.totalQuestions)).fill(
           matchingType.type_name,
         )
         console.log('Updated form data after setting question type:', formData.value)
@@ -465,6 +529,8 @@ onMounted(async () => {
       console.log('Set selectedQuestionTypes to:', selectedQuestionTypes.value)
     }
   }
+
+  applyExamQuestionTypeDefaults()
 })
 
 // Watch for question type selection changes
@@ -473,7 +539,7 @@ watch(selectedQuestionType, (newValue) => {
   if (formData.value.sameType) {
     console.log('Updating form data with new question type:', newValue?.type_name)
     formData.value.questionType = newValue?.type_name ?? ''
-    formData.value.questionTypes = Array(Number(formData.value.totalQuestions)).fill(
+    formData.value.questionTypes = new Array(Number(formData.value.totalQuestions)).fill(
       newValue?.type_name ?? '',
     )
     console.log('Updated form data:', formData.value)
@@ -488,17 +554,17 @@ watch(
     const numValue = Number(newValue)
     if (numValue > 0) {
       if (formData.value.sameType) {
-        formData.value.questionTypes = Array(numValue).fill(formData.value.questionType)
+        formData.value.questionTypes = new Array(numValue).fill(formData.value.questionType)
       } else {
         const currentTypes = [...formData.value.questionTypes]
-        formData.value.questionTypes = Array(numValue)
+        formData.value.questionTypes = new Array(numValue)
           .fill('')
           .map((_, i) => currentTypes[i] ?? '')
-        selectedQuestionTypes.value = Array(numValue)
+        selectedQuestionTypes.value = new Array(numValue)
           .fill(null)
           .map((_, i) => selectedQuestionTypes.value[i] ?? null)
         // Initialize touched state for each question type
-        questionTypeTouched.value = Array(numValue)
+        questionTypeTouched.value = new Array(numValue)
           .fill(false)
           .map((_, i) => questionTypeTouched.value[i] || false)
       }
@@ -516,15 +582,15 @@ watch(
   (newValue) => {
     const numTotalQuestions = Number(formData.value.totalQuestions)
     if (newValue) {
-      formData.value.questionTypes = Array(numTotalQuestions).fill(formData.value.questionType)
-      selectedQuestionTypes.value = Array(numTotalQuestions).fill(selectedQuestionType.value)
+      formData.value.questionTypes = new Array(numTotalQuestions).fill(formData.value.questionType)
+      selectedQuestionTypes.value = new Array(numTotalQuestions).fill(selectedQuestionType.value)
       // Reset individual touchedState since we're using same type for all
       questionTypeTouched.value = []
     } else {
-      formData.value.questionTypes = Array(numTotalQuestions).fill('')
-      selectedQuestionTypes.value = Array(numTotalQuestions).fill(null)
+      formData.value.questionTypes = new Array(numTotalQuestions).fill('')
+      selectedQuestionTypes.value = new Array(numTotalQuestions).fill(null)
       // Initialize touched state for each question type
-      questionTypeTouched.value = Array(numTotalQuestions).fill(false)
+      questionTypeTouched.value = new Array(numTotalQuestions).fill(false)
       // Reset validation state when unchecking same type
       validationStates.value.questionType.valid = false
       selectedQuestionType.value = null
@@ -553,7 +619,7 @@ const currentRemainingMarks = computed(() => {
 
 const isQuestionNumberValid = computed(() => {
   const num = Number(formData.value.questionNumber)
-  return !isNaN(num) && num > 0 && Number.isInteger(num)
+  return !Number.isNaN(num) && num > 0 && Number.isInteger(num)
 })
 
 const isSubQuestionValid = computed(() => {
@@ -574,10 +640,13 @@ const showSectionHeaderError = computed(() => {
 })
 
 const isFormValid = computed(() => {
-  const questionTypesValid = formData.value.sameType
-    ? selectedQuestionType.value !== null
-    : formData.value.questionTypes.length === Number(formData.value.totalQuestions) &&
-      formData.value.questionTypes.every((type) => type.trim() !== '')
+  let questionTypesValid = formData.value.questionTypes.length === Number(formData.value.totalQuestions) &&
+    formData.value.questionTypes.every((type) => type.trim() !== '')
+  if (questionTypeLocked.value) {
+    questionTypesValid = true
+  } else if (formData.value.sameType) {
+    questionTypesValid = selectedQuestionType.value !== null
+  }
 
   return (
     isSectionHeaderValid.value &&
@@ -700,7 +769,7 @@ const getNextFieldId = (index: number): string => {
 const handleIndividualQuestionTypeInput = (value: unknown, index: number) => {
   // Mark this specific question type as touched
   if (questionTypeTouched.value.length <= index) {
-    questionTypeTouched.value = Array(formData.value.questionTypes.length).fill(false)
+    questionTypeTouched.value = new Array(formData.value.questionTypes.length).fill(false)
   }
   questionTypeTouched.value[index] = true
   
@@ -737,6 +806,48 @@ const handleQuestionTypeInput = () => {
   console.log('Question type validation state:', validationStates.value.questionType)
 }
 
+const focusIfInvalid = (isValid: boolean, input: { focus?: () => void } | null | undefined): boolean => {
+  if (isValid) return false
+  input?.focus()
+  return true
+}
+
+const focusQuestionTypeIfInvalid = (): boolean => {
+  if (validationStates.value.questionType.valid || questionTypeLocked.value) return false
+  if (formData.value.sameType) {
+    questionTypeInput.value?.focus()
+  } else {
+    const emptyIndex = formData.value.questionTypes.findIndex((type) => !type)
+    if (emptyIndex !== -1) {
+      document.getElementById(`questionType${emptyIndex}`)?.focus()
+    }
+  }
+  return true
+}
+
+const applyQuestionTypeSelections = () => {
+  if (questionTypeLocked.value) {
+    formData.value.sameType = true
+    formData.value.questionType = MCQ_TYPE_NAME
+    formData.value.questionTypes = new Array(Number(formData.value.totalQuestions)).fill(MCQ_TYPE_NAME)
+    return
+  }
+  if (formData.value.sameType) {
+    formData.value.questionType =
+      selectedQuestionType.value?.type_name ?? formData.value.questionType
+    if (formData.value.questionType) {
+      formData.value.questionTypes = new Array(Number(formData.value.totalQuestions)).fill(
+        formData.value.questionType,
+      )
+    }
+    return
+  }
+  formData.value.questionTypes = formData.value.questionTypes.map(
+    (_, index) =>
+      selectedQuestionTypes.value[index]?.type_name ?? formData.value.questionTypes[index] ?? '',
+  )
+}
+
 // Methods
 const handleSubmit = () => {
   // Mark all fields as touched to trigger validation messages
@@ -746,52 +857,14 @@ const handleSubmit = () => {
   validationStates.value.marksPerQuestion.touched = true
   validationStates.value.questionType.touched = true
 
-  // Check each validation and focus the first invalid field
-  if (!isQuestionNumberValid.value) {
-    questionNumberInput.value?.focus()
-    return
-  }
+  if (focusIfInvalid(isQuestionNumberValid.value, questionNumberInput.value)) return
+  if (focusIfInvalid(isSubQuestionValid.value, subQuestionInput.value)) return
+  if (focusIfInvalid(isSectionNameValid.value, sectionNameInput.value)) return
+  if (focusIfInvalid(validationStates.value.totalQuestions.valid, totalQuestionsInput.value)) return
+  if (focusIfInvalid(validationStates.value.requiredQuestions.valid, requiredQuestionsInput.value)) return
+  if (focusIfInvalid(validationStates.value.marksPerQuestion.valid, marksPerQuestionInput.value)) return
+  if (focusQuestionTypeIfInvalid()) return
 
-  if (!isSubQuestionValid.value) {
-    subQuestionInput.value?.focus()
-    return
-  }
-
-  if (!isSectionNameValid.value) {
-    sectionNameInput.value?.focus()
-    return
-  }
-
-  if (!validationStates.value.totalQuestions.valid) {
-    totalQuestionsInput.value?.focus()
-    return
-  }
-
-  if (!validationStates.value.requiredQuestions.valid) {
-    requiredQuestionsInput.value?.focus()
-    return
-  }
-
-  if (!validationStates.value.marksPerQuestion.valid) {
-    marksPerQuestionInput.value?.focus()
-    return
-  }
-
-  if (!validationStates.value.questionType.valid) {
-    if (formData.value.sameType) {
-      questionTypeInput.value?.focus()
-    } else {
-      // Focus the first empty question type dropdown
-      const emptyIndex = formData.value.questionTypes.findIndex((type) => !type)
-      if (emptyIndex !== -1) {
-        const dropdown = document.getElementById(`questionType${emptyIndex}`)
-        dropdown?.focus()
-      }
-    }
-    return
-  }
-
-  // Final check to ensure section marks don't exceed available marks
   if (sectionMarks.value > availableMarks.value) {
     console.error('SectionForm - Section marks exceed available marks:', {
       sectionMarks: sectionMarks.value,
@@ -802,7 +875,7 @@ const handleSubmit = () => {
     return
   }
 
-  // If all validations pass, emit the submit event
+  applyQuestionTypeSelections()
   emit('submit', formData.value)
 }
 

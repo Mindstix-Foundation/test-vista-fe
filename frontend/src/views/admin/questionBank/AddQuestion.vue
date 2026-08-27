@@ -2,10 +2,24 @@
   <div class="container my-4">
     <div class="container">
       <div class="row g-2 justify-content-end">
-        <router-link class="btn btn-close" :to="{ name: 'questionDashboard' }" aria-label="Close"></router-link>
+        <router-link class="btn btn-close" :to="closeLink" aria-label="Close"></router-link>
       </div>
       <div class="row justify-content-center align-items-center my-2">
         <div class="col col-12 col-sm-10 ">
+          <template v-if="isExamScope">
+            <p class="text-muted text-start fs-5 m-0">{{ questionBankData.programLabel }}</p>
+            <div class="d-flex justify-content-between align-items-center">
+              <h4 class="fw-bolder text-start text-dark m-0">
+                <span v-if="questionBankData.stageName">{{ questionBankData.stageName }} | </span>
+                {{ questionBankData.subjectName || questionBankData.nodeName }}
+                <span v-if="questionBankData.chapterName"> | {{ questionBankData.chapterName }}</span>
+                <span v-if="questionBankData.topicName"> | {{ questionBankData.topicName }}</span>
+                <span class="d-block text-start text-secondary small">Competitive / Entrance syllabus</span>
+              </h4>
+              <h4 class="fw-bolder text-uppercase mb-0" id="pageHeader">Add Question</h4>
+            </div>
+          </template>
+          <template v-else>
           <p class="text-muted text-start fs-5 m-0">
             <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
             <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
@@ -29,6 +43,7 @@
               <h4 class="fw-bolder text-uppercase mb-0" id="pageHeader">Add Question</h4>
             </div>
           </div>
+          </template>
         </div>
       </div>
       <hr>
@@ -39,19 +54,37 @@
           <span class="visually-hidden">Loading...</span>
         </output>
       </div>
-      <QuestionFormComponent
-        v-else-if="validateChapterId()"
-        :questionBankData="questionBankData"
-        :chapterId="questionBankData.chapterId"
-        @save="handleSaveQuestion"
-        @openQuestionImageModal="openQuestionImageModal"
-        @openOptionImageModal="openOptionImageModal"
-        :useSearchableDropdown="true"
-        ref="questionFormComponent"
-        @typeChanged="handleQuestionTypeChanged"
-      />
+      <template v-else-if="canShowForm">
+        <QuestionFormComponent
+          :questionBankData="questionBankData"
+          :chapterId="questionBankData.chapterId"
+          :examMode="isExamScope"
+          :passage-linked="passageLinked"
+          @save="handleSaveQuestion"
+          @update:passage-linked="passageLinked = $event"
+          @openQuestionImageModal="openQuestionImageModal"
+          @openOptionImageModal="openOptionImageModal"
+          :useSearchableDropdown="true"
+          ref="questionFormComponent"
+          @typeChanged="handleQuestionTypeChanged"
+        />
+        <PassageGroupForm
+          v-if="passageLinked && selectedQuestionType === 'Multiple Choice Question (MCQ)'"
+          :saving="isSubmitting"
+          :show-pyq-toggle="true"
+          @save="handleSavePassageGroup"
+          @cancel="passageLinked = false"
+        />
+      </template>
       <div v-else class="alert alert-danger text-center">
-        Chapter ID is missing. Please go back to <router-link :to="{ name: 'questionBank' }">Question Bank</router-link> and try again.
+        <template v-if="isExamScope">
+          Syllabus node is missing. Please go back to
+          <router-link :to="{ name: 'questionBank', query: { scope: 'exam' } }">Question Bank</router-link>
+          and select an exam syllabus node.
+        </template>
+        <template v-else>
+          Chapter ID is missing. Please go back to <router-link :to="{ name: 'questionBank' }">Question Bank</router-link> and try again.
+        </template>
       </div>
     </div>
 
@@ -276,7 +309,7 @@
               @click="uploadCsvQuestions"
               :disabled="csvPreviewData.length === 0 || csvErrors.length > 0 || isCsvUploading"
             >
-              <span v-if="isCsvUploading" class="spinner-border spinner-border-sm me-2"></span>
+              <output v-if="isCsvUploading" class="spinner-border spinner-border-sm me-2"></output>
               Upload {{ csvPreviewData.length }} Questions
             </button>
           </div>
@@ -314,14 +347,17 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import QuestionFormComponent from '@/components/forms/QuestionFormComponent.vue'
+import PassageGroupForm from '@/components/forms/PassageGroupForm.vue'
+import examCatalogService from '@/services/examCatalogService'
 import { useToastStore } from '@/store/toast'
 import ImageUploadEditor from '@/components/common/ImageUploadEditor.vue'
 import imageService from '@/services/imageService'
 import { useImageUploadStore } from '@/stores/imageUpload'
 import * as XLSX from 'xlsx'
+import { resolveExamChapterId } from '@/utils/examSyllabus'
 
 // Define custom error type for Axios errors
 interface AxiosErrorResponse {
@@ -365,6 +401,7 @@ defineOptions({
 })
 
 const router = useRouter()
+const route = useRoute()
 const toastStore = useToastStore()
 const imageUploadStore = useImageUploadStore()
 const isLoading = ref(true)
@@ -395,35 +432,79 @@ const currentQuestionData = ref<{
 
 // Data from localStorage
 const questionBankData = ref({
+  scope: 'board' as 'board' | 'exam',
   boardId: '',
   boardName: '',
   mediumId: '',
   mediumName: '',
+  languageId: '',
+  languageName: '',
   standardId: '',
   standardName: '',
   subjectId: '',
   subjectName: '',
   chapterId: '',
   chapterName: '',
-  mediumStandardSubjectId: null
+  topicId: '',
+  topicName: '',
+  mediumStandardSubjectId: null as number | null,
+  programId: '',
+  programLabel: '',
+  stageId: '',
+  stageName: '',
+  nodeId: '',
+  nodeName: '',
+})
+
+const passageLinked = ref(false)
+
+const isExamScope = computed(() => {
+  const data = questionBankData.value
+  return data.scope === 'exam' || (!!data.programId && !!resolveExamChapterId(data))
+})
+
+const canShowForm = computed(() => {
+  if (isExamScope.value) return !!resolveExamChapterId(questionBankData.value)
+  return !!questionBankData.value.chapterId
+})
+
+const closeLink = computed(() => {
+  if (isExamScope.value) {
+    const query: Record<string, string> = {
+      scope: 'exam',
+      programId: String(questionBankData.value.programId),
+      chapterId: String(questionBankData.value.chapterId || resolveExamChapterId(questionBankData.value) || ''),
+    }
+    if (questionBankData.value.stageId) query.stageId = String(questionBankData.value.stageId)
+    if (questionBankData.value.subjectId) query.subjectId = String(questionBankData.value.subjectId)
+    if (questionBankData.value.topicId) query.topicId = String(questionBankData.value.topicId)
+    if (questionBankData.value.languageId) query.languageId = String(questionBankData.value.languageId)
+    if (questionBankData.value.mediumId) {
+      query.mediumId = String(questionBankData.value.mediumId)
+      if (questionBankData.value.mediumName) query.mediumName = questionBankData.value.mediumName
+    }
+    return { name: 'questionDashboard', query }
+  }
+  return { name: 'questionDashboard' }
 })
 
 // Computed property to show CSV upload button for all question types
 const showCsvUploadButton = computed(() => {
-  return selectedQuestionType.value !== '' // Show for all question types when one is selected
+  // CSV import is for standalone questions only; passage groups are authored via the form.
+  return selectedQuestionType.value !== '' && !passageLinked.value
 })
 
 // Debug function to validate chapter ID
 function validateChapterId() {
-  if (!questionBankData.value.chapterId) {
-    return false;
-  }
-  return true;
+  return canShowForm.value
 }
 
 // Handle question type change from QuestionFormComponent
 function handleQuestionTypeChanged(questionType: string) {
   selectedQuestionType.value = questionType
+  if (questionType !== 'Multiple Choice Question (MCQ)') {
+    passageLinked.value = false
+  }
 }
 
 // Get required headers based on question type
@@ -473,21 +554,19 @@ function handleFileSelect(event: Event) {
   }
 
   if (isCSV) {
-    // Handle CSV file
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const csv = e.target?.result as string
+    file.text().then((csv) => {
       parseCsvData(csv)
-    }
-    reader.readAsText(file)
+    }).catch((error) => {
+      console.error('Failed to read CSV file:', error)
+      csvErrors.value = ['Failed to read CSV file']
+    })
   } else {
-    // Handle Excel file
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const data = e.target?.result as ArrayBuffer
+    file.arrayBuffer().then((data) => {
       parseExcelData(data)
-    }
-    reader.readAsArrayBuffer(file)
+    }).catch((error) => {
+      console.error('Failed to read Excel file:', error)
+      csvErrors.value = ['Failed to read Excel file']
+    })
   }
 }
 
@@ -523,9 +602,9 @@ function parseCsvData(csvText: string) {
       }
 
       const row: any = {}
-      headers.forEach((header, index) => {
+      for (const [index, header] of headers.entries()) {
         row[header] = values[index]
-      })
+      }
 
       // Validate row data
       const rowErrors = validateCsvRow(row, i + 1)
@@ -539,6 +618,7 @@ function parseCsvData(csvText: string) {
     csvPreviewData.value = data
     csvErrors.value = errors
   } catch (error) {
+    console.error(error)
     csvErrors.value = ['Failed to parse CSV file. Please check the file format.']
   }
 }
@@ -578,9 +658,9 @@ function parseExcelData(arrayBuffer: ArrayBuffer) {
       if (!values || values.length === 0) continue // Skip empty rows
       
       const row: any = {}
-      headers.forEach((header, index) => {
+      for (const [index, header] of headers.entries()) {
         row[header] = values[index] ? String(values[index]).trim() : ''
-      })
+      }
 
       // Validate row data
       const rowErrors = validateCsvRow(row, i + 1)
@@ -594,6 +674,7 @@ function parseExcelData(arrayBuffer: ArrayBuffer) {
     csvPreviewData.value = data
     csvErrors.value = errors
   } catch (error) {
+    console.error(error)
     csvErrors.value = ['Failed to parse Excel file. Please check the file format.']
   }
 }
@@ -607,30 +688,29 @@ function validateCsvRow(row: any, rowNumber: number): string[] {
   }
 
   switch (selectedQuestionType.value) {
-    case 'Multiple Choice Question (MCQ)':
-  if (!row.a?.trim()) {
-    errors.push(`Row ${rowNumber}: Option A is required`)
-  }
-  if (!row.b?.trim()) {
-    errors.push(`Row ${rowNumber}: Option B is required`)
-  }
-  
-  // Check correct answer
-  const correctAnswer = row.correct_answer?.toLowerCase()
-  if (!['a', 'b', 'c', 'd'].includes(correctAnswer)) {
-    errors.push(`Row ${rowNumber}: Correct answer must be a, b, c, or d`)
+    case 'Multiple Choice Question (MCQ)': {
+      if (!row.a?.trim()) {
+        errors.push(`Row ${rowNumber}: Option A is required`)
+      }
+      if (!row.b?.trim()) {
+        errors.push(`Row ${rowNumber}: Option B is required`)
+      }
+      const correctAnswer = row.correct_answer?.toLowerCase()
+      if (!['a', 'b', 'c', 'd'].includes(correctAnswer)) {
+        errors.push(`Row ${rowNumber}: Correct answer must be a, b, c, or d`)
       }
       break
+    }
 
-    case 'True or False':
+    case 'True or False': {
       const isTrue = row.is_true?.toLowerCase()
       if (!['true', 'false'].includes(isTrue)) {
         errors.push(`Row ${rowNumber}: is_true must be true or false`)
       }
       break
+    }
 
-    case 'Match the Pairs':
-      // Check for at least 2 LHS and 2 RHS items
+    case 'Match the Pairs': {
       const lhsItems = [row.lhs_1, row.lhs_2, row.lhs_3, row.lhs_4, row.lhs_5].filter(item => item?.trim())
       const rhsItems = [row.rhs_1, row.rhs_2, row.rhs_3, row.rhs_4, row.rhs_5].filter(item => item?.trim())
       
@@ -641,10 +721,9 @@ function validateCsvRow(row: any, rowNumber: number): string[] {
         errors.push(`Row ${rowNumber}: At least 2 right-hand side items are required`)
       }
       break
+    }
 
     default:
-      // For all other question types (Fill in the Blanks, descriptive questions, marks-based questions), 
-      // only question is required (already checked above)
       break
   }
 
@@ -682,7 +761,9 @@ async function uploadCsvQuestions() {
     if (successCount > 0) {
       toastStore.showToast({
         title: 'File Upload Complete',
-        message: `Successfully uploaded ${successCount} questions${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
+        message: failedCount > 0
+          ? `Successfully uploaded ${successCount} questions, ${failedCount} failed`
+          : `Successfully uploaded ${successCount} questions`,
         type: successCount === csvPreviewData.value.length ? 'success' : 'warning'
       })
     }
@@ -735,37 +816,32 @@ function createCsvQuestionRequest(row: CsvRowData, topicId: number) {
       topic_id: topicId
     },
     question_text_topic_medium_data: {
-      instruction_medium_id: parseInt(questionBankData.value.mediumId)
+      instruction_medium_id: Number.parseInt(questionBankData.value.mediumId, 10)
     }
   }
 
   switch (selectedQuestionType.value) {
-    case 'Multiple Choice Question (MCQ)':
-  // Map correct answer letter to index
-  const correctAnswerMap: { [key: string]: number } = {
-    'a': 0, 'b': 1, 'c': 2, 'd': 3
-  }
-
+    case 'Multiple Choice Question (MCQ)': {
+      const correctAnswerMap: { [key: string]: number } = {
+        'a': 0, 'b': 1, 'c': 2, 'd': 3
+      }
       const options = [row.a, row.b, row.c, row.d].filter(opt => opt && opt.trim() !== '')
       const correctOptionIndex = correctAnswerMap[row.correct_answer?.toLowerCase() || '']
-
-  const mcqOptions = options.map((optionText, index) => ({
+      const mcqOptions = options.map((optionText, index) => ({
         option_text: optionText?.trim() || '',
-    is_correct: index === correctOptionIndex
-  }))
-
+        is_correct: index === correctOptionIndex
+      }))
       baseRequest.question_text_data.mcq_options = mcqOptions
       break
+    }
 
     case 'True or False':
-      // For True/False, we store the answer as answer_text
       baseRequest.question_text_data.answer_text = row.is_true?.toLowerCase() === 'true' ? 'True' : 'False'
       break
 
-    case 'Match the Pairs':
+    case 'Match the Pairs': {
       const lhsItems = [row.lhs_1, row.lhs_2, row.lhs_3, row.lhs_4, row.lhs_5].filter(item => item?.trim())
       const rhsItems = [row.rhs_1, row.rhs_2, row.rhs_3, row.rhs_4, row.rhs_5].filter(item => item?.trim())
-      
       const matchPairs = []
       const maxLength = Math.max(lhsItems.length, rhsItems.length)
       
@@ -783,10 +859,9 @@ function createCsvQuestionRequest(row: CsvRowData, topicId: number) {
       
       baseRequest.question_text_data.match_pairs = matchPairs
       break
+    }
 
     default:
-      // For all other question types (Fill in the Blanks, descriptive questions, marks-based questions),
-      // we only store the question text, no answers
       break
   }
 
@@ -1021,16 +1096,40 @@ function createBaseQuestionRequest(payload: {
   topicId: number;
   questionText: string;
 }, imageId: number | null) {
+  const textData: {
+    question_text: string;
+    image_id?: number;
+    mcq_options?: any[];
+    match_pairs?: any[];
+    answer_text?: string;
+  } = {
+    question_text: payload.questionText,
+  };
+
+  if (imageId) {
+    textData.image_id = imageId;
+  }
+
+  if (isExamScope.value) {
+    const request: Record<string, unknown> = {
+      question_type_id: payload.questionTypeId,
+      board_question: payload.isPreviousExam,
+      syllabus_node_id: resolveExamChapterId(questionBankData.value)!,
+      question_text_data: textData,
+    }
+    if (questionBankData.value.mediumId) {
+      request.question_text_topic_medium_data = {
+        instruction_medium_id: Number.parseInt(questionBankData.value.mediumId, 10),
+        translation_status: 'original',
+      }
+    }
+    return request
+  }
+
   const request: {
     question_type_id: number;
     board_question: boolean;
-    question_text_data: {
-      question_text: string;
-      image_id?: number;
-      mcq_options?: any[];
-      match_pairs?: any[];
-      answer_text?: string;
-    };
+    question_text_data: typeof textData;
     question_topic_data: {
       topic_id: number;
     };
@@ -1040,21 +1139,14 @@ function createBaseQuestionRequest(payload: {
   } = {
     question_type_id: payload.questionTypeId,
     board_question: payload.isPreviousExam,
-    question_text_data: {
-      question_text: payload.questionText
-    },
+    question_text_data: textData,
     question_topic_data: {
       topic_id: payload.topicId
     },
     question_text_topic_medium_data: {
-      instruction_medium_id: parseInt(questionBankData.value.mediumId)
+      instruction_medium_id: Number.parseInt(questionBankData.value.mediumId, 10)
     }
   };
-  
-  // Add image ID if an image was uploaded
-  if (imageId) {
-    request.question_text_data.image_id = imageId;
-  }
   
   return request;
 }
@@ -1069,6 +1161,172 @@ function processSpecialQuestionTypes(request: any, questionTypeId: number, corre
   }
   
   return request;
+}
+
+function buildQuestionDashboardQuery(
+  message: string,
+  includeLanguageAndMedium = false,
+): Record<string, string> {
+  const dashboardQuery: Record<string, string> = {
+    success: 'true',
+    message,
+    tab: 'unverified',
+  }
+  if (!isExamScope.value) return dashboardQuery
+  dashboardQuery.scope = 'exam'
+  dashboardQuery.programId = String(questionBankData.value.programId)
+  dashboardQuery.chapterId = String(
+    questionBankData.value.chapterId || resolveExamChapterId(questionBankData.value) || '',
+  )
+  if (questionBankData.value.stageId) dashboardQuery.stageId = String(questionBankData.value.stageId)
+  if (questionBankData.value.subjectId) dashboardQuery.subjectId = String(questionBankData.value.subjectId)
+  if (questionBankData.value.topicId) dashboardQuery.topicId = String(questionBankData.value.topicId)
+  if (!includeLanguageAndMedium) return dashboardQuery
+  if (questionBankData.value.languageId) {
+    dashboardQuery.languageId = String(questionBankData.value.languageId)
+  }
+  if (questionBankData.value.mediumId) {
+    dashboardQuery.mediumId = String(questionBankData.value.mediumId)
+    if (questionBankData.value.mediumName) {
+      dashboardQuery.mediumName = questionBankData.value.mediumName
+    }
+  }
+  return dashboardQuery
+}
+
+async function createPassageGroupForCurrentScope(
+  payload: {
+    passage_text: string
+    is_pyq: boolean
+    children: {
+      question_text: string
+      options: { text: string; is_correct: boolean }[]
+      group_order: number
+    }[]
+  },
+  nodeId: number,
+  topicId: number,
+  mediumId: number,
+): Promise<boolean> {
+  const toastStore = useToastStore()
+  if (isExamScope.value) {
+    if (!nodeId) {
+      toastStore.showToast('Missing syllabus node', 'Select an exam syllabus node first.', 'danger')
+      return false
+    }
+    await examCatalogService.createPassageGroup({
+      syllabus_node_id: nodeId,
+      passage_text: payload.passage_text,
+      is_pyq: payload.is_pyq,
+      children: payload.children.map((child) => ({
+        question_text: child.question_text,
+        group_order: child.group_order,
+        options: child.options,
+      })),
+    })
+    return true
+  }
+  if (!topicId) {
+    toastStore.showToast('Missing topic', 'Select a topic before creating a passage group.', 'danger')
+    return false
+  }
+  await examCatalogService.createBoardPassageGroup({
+    passage_text: payload.passage_text,
+    board_question: payload.is_pyq,
+    question_topic_data: { topic_id: topicId },
+    ...(mediumId
+      ? { question_text_topic_medium_data: { instruction_medium_id: mediumId } }
+      : {}),
+    children: payload.children.map((child) => ({
+      question_text: child.question_text,
+      group_order: child.group_order,
+      mcq_options: child.options.map((opt) => ({
+        option_text: opt.text,
+        is_correct: opt.is_correct,
+      })),
+    })),
+  })
+  return true
+}
+
+async function handleSavePassageGroup(payload: {
+  passage_text: string
+  is_pyq: boolean
+  children: {
+    question_text: string
+    options: { text: string; is_correct: boolean }[]
+    group_order: number
+  }[]
+}) {
+  try {
+    isSubmitting.value = true
+    const toastStore = useToastStore()
+    const nodeId = Number(
+      questionBankData.value.nodeId ||
+        questionBankData.value.topicId ||
+        questionBankData.value.chapterId ||
+        resolveExamChapterId(questionBankData.value),
+    )
+    const selectedFormTopicId = Number(questionFormComponent.value?.getSelectedTopicId?.() || 0)
+    const topicId = Number(selectedFormTopicId || questionBankData.value.topicId || 0)
+    const mediumId = Number(questionBankData.value.mediumId || 0)
+
+    const created = await createPassageGroupForCurrentScope(payload, nodeId, topicId, mediumId)
+    if (!created) return
+
+    toastStore.showToast('Success', 'Passage group created successfully', 'success')
+    router.push({
+      name: 'questionDashboard',
+      query: buildQuestionDashboardQuery('Passage group created successfully'),
+    })
+  } catch (error: any) {
+    const toastStore = useToastStore()
+    toastStore.showToast(
+      'Error',
+      error?.response?.data?.message || 'Failed to create passage group',
+      'danger',
+    )
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+async function applyTypeSpecificQuestionData(
+  payload: {
+    questionTypeId: number;
+    additionalData: {
+      options?: string[];
+      correctOption?: number;
+      correctAnswer?: string;
+      lhs?: string[];
+      rhs?: string[];
+    };
+  },
+  createQuestionRequest: any,
+) {
+  if (payload.questionTypeId === 1 && payload.additionalData?.options) {
+    createQuestionRequest.question_text_data.mcq_options =
+      await processMCQOptions(
+        payload.additionalData.options,
+        payload.additionalData.correctOption
+      );
+  }
+
+  if (payload.questionTypeId === 5 && payload.additionalData?.lhs && payload.additionalData?.rhs) {
+    createQuestionRequest.question_text_data.match_pairs =
+      await processMatchPairs(
+        payload.additionalData.lhs,
+        payload.additionalData.rhs
+      );
+  }
+
+  if (payload.questionTypeId === 2 || payload.questionTypeId === 3) {
+    processSpecialQuestionTypes(
+      createQuestionRequest,
+      payload.questionTypeId,
+      payload.additionalData?.correctAnswer
+    );
+  }
 }
 
 // Handle saving the question
@@ -1088,72 +1346,33 @@ async function handleSaveQuestion(payload: {
   optionImages?: (File | null)[];
 }) {
   try {
-    // Show loading overlay
     isSubmitting.value = true;
     
-    // Process main question image if exists in store
     let imageId = null;
     if (imageUploadStore.getQuestionImage()) {
       try {
         imageId = await processMainQuestionImage();
       } catch {
-        // Critical error occurred, abort question creation
         isSubmitting.value = false;
         return;
       }
     }
     
-    // Create the base question request
     const createQuestionRequest = createBaseQuestionRequest(payload, imageId);
+    await applyTypeSpecificQuestionData(payload, createQuestionRequest);
     
-    // Process MCQ options with images if applicable
-    if (payload.questionTypeId === 1 && payload.additionalData?.options) {
-      createQuestionRequest.question_text_data.mcq_options = 
-        await processMCQOptions(
-          payload.additionalData.options, 
-          payload.additionalData.correctOption
-        );
-    }
-    
-    // Process match pairs with images if applicable
-    if (payload.questionTypeId === 5 && payload.additionalData?.lhs && payload.additionalData?.rhs) {
-      createQuestionRequest.question_text_data.match_pairs = 
-        await processMatchPairs(
-          payload.additionalData.lhs,
-          payload.additionalData.rhs
-        );
-    }
-    
-    // Handle special question types
-    if (payload.questionTypeId === 2 || payload.questionTypeId === 3) {
-      processSpecialQuestionTypes(
-        createQuestionRequest, 
-        payload.questionTypeId,
-        payload.additionalData?.correctAnswer
-      );
-    }
-    
-    // Make API call to create the question
     const response = await axiosInstance.post('/questions/add', createQuestionRequest);
     console.log('Question created successfully:', response.data);
     
-    // Clear images from store after successful save
     imageUploadStore.clearAllImages();
     
-    // Navigate back to question dashboard with success query param
     router.push({
       name: 'questionDashboard',
-      query: {
-        success: 'true',
-        message: 'Question created successfully',
-        tab: 'unverified'
-      }
+      query: buildQuestionDashboardQuery('Question created successfully', true),
     });
   } catch (error: unknown) {
-    // Hide loading overlay
     isSubmitting.value = false;
     
-    // Show error toast using toast store
     const axiosError = error as AxiosErrorResponse;
     toastStore.showToast({
       title: 'Error',
@@ -1212,7 +1431,7 @@ function handleQuestionImageCancelled() {
   imageUploadStore.removeQuestionImage()
   
   // Emit a custom event that the QuestionFormComponent can listen to
-  window.dispatchEvent(new CustomEvent('clearQuestionImage'))
+  globalThis.dispatchEvent(new CustomEvent('clearQuestionImage'))
 }
 
 function handleOptionImageCancelled() {
@@ -1226,7 +1445,7 @@ function handleOptionImageCancelled() {
   const event = new CustomEvent('clearOptionImage', { 
     detail: { optionIndex: currentOptionIndex.value } 
   });
-  window.dispatchEvent(event);
+  globalThis.dispatchEvent(event);
 }
 
 // Lifecycle hooks
@@ -1239,12 +1458,41 @@ onMounted(() => {
   if (storedData) {
     try {
       const parsedData = JSON.parse(storedData)
-      questionBankData.value = parsedData
-
-      // Clean up the chapterId if it exists but might be a string "null" or "undefined"
-      if (questionBankData.value.chapterId === "null" || questionBankData.value.chapterId === "undefined") {
-        questionBankData.value.chapterId = ""
+      const chapterId = parsedData.chapterId ?? parsedData.nodeId ?? ''
+      questionBankData.value = {
+        scope: parsedData.scope ?? (parsedData.programId && chapterId ? 'exam' : 'board'),
+        boardId: parsedData.boardId ?? '',
+        boardName: parsedData.boardName ?? '',
+        mediumId: parsedData.mediumId ?? '',
+        mediumName: parsedData.mediumName ?? parsedData.languageName ?? '',
+        languageId: parsedData.languageId ?? '',
+        languageName: parsedData.languageName ?? parsedData.mediumName ?? '',
+        standardId: parsedData.standardId ?? '',
+        standardName: parsedData.standardName ?? '',
+        subjectId: parsedData.subjectId ?? '',
+        subjectName: parsedData.subjectName ?? '',
+        chapterId: parsedData.chapterId ?? chapterId,
+        chapterName: parsedData.chapterName ?? parsedData.nodeName ?? '',
+        topicId: parsedData.topicId ?? '',
+        topicName: parsedData.topicName ?? '',
+        mediumStandardSubjectId: parsedData.mediumStandardSubjectId ?? null,
+        programId: parsedData.programId ?? '',
+        programLabel: parsedData.programLabel ?? '',
+        stageId: parsedData.stageId ?? '',
+        stageName: parsedData.stageName ?? '',
+        nodeId: parsedData.nodeId ?? parsedData.topicId ?? chapterId,
+        nodeName: parsedData.nodeName ?? parsedData.topicName ?? parsedData.chapterName ?? '',
       }
+
+      const routeChapterId = route.query.chapterId ?? route.query.nodeId
+      if (route.query.scope === 'exam' && route.query.programId && routeChapterId) {
+        questionBankData.value.scope = 'exam'
+        questionBankData.value.programId = String(route.query.programId)
+        questionBankData.value.chapterId = String(routeChapterId)
+        questionBankData.value.nodeId = String(routeChapterId)
+      }
+
+      localStorage.setItem('questionBank', JSON.stringify(questionBankData.value))
 
       isLoading.value = false
     } catch {

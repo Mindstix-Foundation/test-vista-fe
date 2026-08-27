@@ -35,6 +35,7 @@
           v-model="selectedState"
           :required="true"
           :disabled="!address.country_id"
+          :loading="loadingStates"
           :class="{
             'is-invalid': !validationStates.state.valid && validationStates.state.touched,
             'is-valid': validationStates.state.valid,
@@ -179,6 +180,7 @@ const emit = defineEmits<{
 const countries = ref<Country[]>([])
 const states = ref<State[]>([])
 const cities = ref<City[]>([])
+const loadingStates = ref(false)
 const selectedCountry = ref<Country | null>(null)
 const selectedState = ref<State | null>(null)
 const selectedCity = ref<City | null>(null)
@@ -249,15 +251,14 @@ const fetchAndSetCountry = async () => {
   selectedCountry.value = country
   
   // ✅ Improved caching: Only fetch states if we don't have any OR if they're for a different country
-  const hasStatesForThisCountry = states.value.length > 0 && 
-    states.value.some(s => s.country_id === address.value.country_id)
+  const hasStatesForThisCountry = states.value.some(s => s.country_id === address.value.country_id)
   
-  if (!hasStatesForThisCountry) {
+  if (hasStatesForThisCountry) {
+    console.log(`✅ Using cached states for country ${address.value.country_id}`)
+  } else {
     console.log(`📡 Fetching states for country ${address.value.country_id}`)
     const statesResponse = await axiosInstance.get(`/states?countryId=${address.value.country_id}`)
     states.value = statesResponse.data
-  } else {
-    console.log(`✅ Using cached states for country ${address.value.country_id}`)
   }
   
   // Short delay to ensure states are processed
@@ -272,15 +273,14 @@ const fetchAndSetState = async () => {
   selectedState.value = state
   
   // ✅ Improved caching: Only fetch cities if we don't have any OR if they're for a different state
-  const hasCitiesForThisState = cities.value.length > 0 && 
-    cities.value.some(c => c.state_id === address.value.state_id)
+  const hasCitiesForThisState = cities.value.some(c => c.state_id === address.value.state_id)
   
-  if (!hasCitiesForThisState) {
+  if (hasCitiesForThisState) {
+    console.log(`✅ Using cached cities for state ${address.value.state_id}`)
+  } else {
     console.log(`📡 Fetching cities for state ${address.value.state_id}`)
     const citiesResponse = await axiosInstance.get(`/cities?stateId=${address.value.state_id}`)
     cities.value = citiesResponse.data
-  } else {
-    console.log(`✅ Using cached cities for state ${address.value.state_id}`)
   }
   
   // Short delay to ensure cities are processed
@@ -371,11 +371,17 @@ const handleCountryChange = async (value: Country | null) => {
     // ✅ Fetch states for this country (user-triggered, so always fetch fresh data)
     if (value?.id) {
       console.log(`📡 User-triggered: Fetching states for country ${value.id}`)
-      const response = await axiosInstance.get(`/states?countryId=${value.id}`)
-      states.value = response.data
+      loadingStates.value = true
+      try {
+        const response = await axiosInstance.get(`/states?countryId=${value.id}`)
+        states.value = response.data
+      } finally {
+        loadingStates.value = false
+      }
     }
   } catch (error) {
     console.error('Error in handleCountryChange:', error)
+    loadingStates.value = false
   }
 }
 

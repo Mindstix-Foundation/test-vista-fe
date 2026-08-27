@@ -79,7 +79,7 @@ const handleSubmit = async (formData: FormData) => {
       const { data: createdSection } = await axiosInstance.post('/sections', {
         pattern_id: pattern.id,
         sequence_number: section.seqencial_section_number,
-        section_number: parseInt(section.questionNumber),
+        section_number: Number.parseInt(section.questionNumber, 10),
         sub_section: section.subQuestion,
         section_name: section.sectionName,
         total_questions: section.totalQuestions,
@@ -146,8 +146,8 @@ const handleAddSection = (formData: FormData) => {
 
   // Find the highest Q number (section_number) from existing sections
   const highestSectionNumber = patternStore.sections.reduce((max, section) => {
-    const currentNumber = parseInt(section.questionNumber) || 0
-    return currentNumber > max ? currentNumber : max
+    const currentNumber = Number.parseInt(section.questionNumber, 10) || 0
+    return Math.max(currentNumber, max)
   }, 0)
   const nextSectionNumber = highestSectionNumber + 1
   const nextSequenceNumber = patternStore.sections.length + 1

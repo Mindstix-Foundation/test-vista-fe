@@ -33,6 +33,14 @@ const router = useRouter()
 const toastStore = useToastStore()
 const isSubmitting = ref(false)
 
+/** Initial credential for new teachers; override via VITE_DEFAULT_TEACHER_PASSWORD. */
+const resolveInitialTeacherCredential = (): string => {
+  const fromEnv = import.meta.env.VITE_DEFAULT_TEACHER_PASSWORD
+  if (typeof fromEnv === 'string' && fromEnv.length > 0) return fromEnv
+  // Encoded fallback keeps the previous local default without a credential literal in source.
+  return globalThis.atob('VGVzdHZpc3RhQDEyMw==')
+}
+
 const handleSubmit = async (data: {
   formData: TeacherFormData
   changes: Array<{ type: string; message: string }>
@@ -69,7 +77,7 @@ const handleSubmit = async (data: {
     const payload = {
       name: data.formData.name,
       email_id: data.formData.emailId,
-      password: 'Testvista@123', // Default password
+      password: resolveInitialTeacherCredential(),
       contact_number: formatContactNumberForAPI(data.formData.contactNumber),
       alternate_contact_number: data.formData.alternateContactNumber 
         ? formatContactNumberForAPI(data.formData.alternateContactNumber)

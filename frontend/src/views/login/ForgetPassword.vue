@@ -49,7 +49,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import LoginNavBar from '@/components/LoginNavBar.vue'
 import axiosInstance from '@/config/axios'
-import { VALIDATION_MESSAGES } from '@/utils/validationConstants'
+import { VALIDATION_MESSAGES, validateEmail } from '@/utils/validationConstants'
 
 const router = useRouter()
 const email = ref('')
@@ -57,11 +57,6 @@ const emailError = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const isLoading = ref(false)
-
-const validateEmail = (email: string) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.exec(String(email).toLowerCase()) !== null;
-}
 
 const handleSendResetLink = async () => {
   // Reset messages

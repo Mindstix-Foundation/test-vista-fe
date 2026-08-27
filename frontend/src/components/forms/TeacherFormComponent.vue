@@ -420,7 +420,7 @@
       <!-- Submit Button -->
       <div class="text-center mt-3">
         <button type="submit" class="btn btn-dark" :disabled="isSubmitting">
-          <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2"></span>
+          <output v-if="isSubmitting" class="spinner-border spinner-border-sm me-2"></output>
           {{ isSubmitting ? 'Submitting...' : isEditMode ? 'Update' : 'Submit' }}
         </button>
       </div>
@@ -429,15 +429,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import useVuelidate from '@vuelidate/core'
 import { required, email, helpers } from '@vuelidate/validators'
 import type { TeacherFormData } from '@/models/Teacher'
 import axiosInstance from '@/config/axios'
 import { Modal } from 'bootstrap'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import SearchableDropdown from '@/components/common/SearchableDropdown.vue'
-import { useToastStore } from '@/store/toast'
 import { validateContactNumber, formatContactNumber, formatContactNumberForAPI, VALIDATION_MESSAGES } from '@/utils/validationConstants'
 
 // Props and Emits
@@ -737,9 +736,9 @@ watch(
       }
 
       // First mark all fields as touched
-      Object.keys(validationStates).forEach((key) => {
+      for (const key of Object.keys(validationStates)) {
         validationStates[key as keyof typeof validationStates].touched = true
-      })
+      }
 
       // Then validate each field and store results
       const nameValid = newData.name.length >= 3 && /^[a-zA-Z\s]*$/.test(newData.name)
@@ -924,9 +923,9 @@ const handleSubmit = async () => {
   await updateBoardValidation()
 
   // Mark all fields as touched to show validation errors
-  Object.keys(validationStates).forEach((key) => {
+  for (const key of Object.keys(validationStates)) {
     validationStates[key as keyof typeof validationStates].touched = true
-  })
+  }
 
   // Validate teacher subjects
   if (!validateTeacherSubjects()) return
@@ -970,14 +969,14 @@ const calculateChanges = async () => {
 
 // Helper function to track new teacher subjects
 const handleNewTeacherSubjects = () => {
-  formData.groupedSubjects?.forEach((standard) => {
-    standard.subjects.forEach((subject) => {
+  for (const standard of formData.groupedSubjects ?? []) {
+    for (const subject of standard.subjects) {
       changes.value.push({
         type: 'add',
         message: `Added "${subject.name}" to Standard ${standard.standardName}`,
       })
-    })
-  })
+    }
+  }
 }
 
 // Helper function to check for changes in basic teacher information
@@ -1061,39 +1060,39 @@ interface Subject {
 
 // Helper function to check for completely removed standards
 const checkRemovedStandards = (initialStandards: Standard[], currentStandards: Standard[]) => {
-  initialStandards.forEach((standard) => {
+  for (const standard of initialStandards) {
     const standardExists = currentStandards.some((s) => s.standardId === standard.standardId)
     
     if (!standardExists) {
-      standard.subjects.forEach((subject: Subject) => {
+      for (const subject of standard.subjects) {
         changes.value.push({
           type: 'delete',
           message: `Removed "${subject.name}" from Standard ${standard.standardName}`,
         })
-      })
+      }
     }
-  })
+  }
 }
 
 // Helper function to check for completely new standards
 const checkNewStandards = (initialStandards: Standard[], currentStandards: Standard[]) => {
-  currentStandards.forEach((standard) => {
+  for (const standard of currentStandards) {
     const standardIsNew = !initialStandards.some((s) => s.standardId === standard.standardId)
     
     if (standardIsNew) {
-      standard.subjects.forEach((subject: Subject) => {
+      for (const subject of standard.subjects) {
         changes.value.push({
           type: 'add',
           message: `Added "${subject.name}" to Standard ${standard.standardName}`,
         })
-      })
+      }
     }
-  })
+  }
 }
 
 // Helper function to check for modified standards (added/removed subjects)
 const checkModifiedStandards = (initialStandards: Standard[], currentStandards: Standard[]) => {
-  currentStandards.forEach((currentStandard) => {
+  for (const currentStandard of currentStandards) {
     const initialStandard = initialStandards.find(
       (s) => s.standardId === currentStandard.standardId
     )
@@ -1102,12 +1101,12 @@ const checkModifiedStandards = (initialStandards: Standard[], currentStandards: 
       checkAddedSubjects(currentStandard, initialStandard)
       checkRemovedSubjects(currentStandard, initialStandard)
     }
-  })
+  }
 }
 
 // Helper function to check for added subjects within a standard
 const checkAddedSubjects = (currentStandard: Standard, initialStandard: Standard) => {
-  currentStandard.subjects.forEach((subject: Subject) => {
+  for (const subject of currentStandard.subjects) {
     const subjectExists = initialStandard.subjects.some((s: Subject) => s.id === subject.id)
     
     if (!subjectExists) {
@@ -1116,12 +1115,12 @@ const checkAddedSubjects = (currentStandard: Standard, initialStandard: Standard
         message: `Added "${subject.name}" to Standard ${currentStandard.standardName}`,
       })
     }
-  })
+  }
 }
 
 // Helper function to check for removed subjects within a standard
 const checkRemovedSubjects = (currentStandard: Standard, initialStandard: Standard) => {
-  initialStandard.subjects.forEach((subject: Subject) => {
+  for (const subject of initialStandard.subjects) {
     const subjectStillExists = currentStandard.subjects.some((s: Subject) => s.id === subject.id)
     
     if (!subjectStillExists) {
@@ -1130,7 +1129,7 @@ const checkRemovedSubjects = (currentStandard: Standard, initialStandard: Standa
         message: `Removed "${subject.name}" from Standard ${currentStandard.standardName}`,
       })
     }
-  })
+  }
 }
 
 const handleConfirm = async () => {
@@ -1196,7 +1195,7 @@ const handleStandardSelect = async () => {
 
     // Create unique list of subjects
     const uniqueSubjects = new Map()
-    subjects.forEach((subject: { id: number; name: string }) => {
+    for (const subject of subjects as { id: number; name: string }[]) {
       if (!uniqueSubjects.has(subject.id)) {
         uniqueSubjects.set(subject.id, {
           id: subject.id,
@@ -1206,7 +1205,7 @@ const handleStandardSelect = async () => {
           subjectId: subject.id, // The subject.id is now directly the subject ID
         })
       }
-    })
+    }
 
     availableSubjects.value = Array.from(uniqueSubjects.values())
 
@@ -1539,10 +1538,10 @@ onMounted(() => {
   }
 
   // Initialize validation states
-  Object.keys(validationStates).forEach((key) => {
+  for (const key of Object.keys(validationStates)) {
     validationStates[key as keyof typeof validationStates].touched = false
     validationStates[key as keyof typeof validationStates].valid = false
-  })
+  }
 })
 
 // Modify fetchBoards to set selectedBoard when loading initial data

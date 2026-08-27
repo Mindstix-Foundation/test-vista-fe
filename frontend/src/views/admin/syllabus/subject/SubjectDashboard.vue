@@ -196,6 +196,7 @@ import { Modal } from 'bootstrap'
 import Sortable from 'sortablejs'
 import { useToastStore } from '@/store/toast'
 import axiosInstance from '@/config/axios'
+import { boardSyllabusQueryString } from '@/utils/boardSyllabus'
 
 interface Board {
   id: number
@@ -358,6 +359,21 @@ const fetchData = async () => {
     })
   } finally {
     isLoading.value = false
+
+    if (selectedBoard.value && selectedMedium.value && selectedStandard.value && selectedSubject.value) {
+      router.replace({
+        query: boardSyllabusQueryString({
+          board: selectedBoard.value.id,
+          medium: selectedMedium.value.id,
+          standard: selectedStandard.value.id,
+          subject: selectedSubject.value.id,
+          boardName: selectedBoard.value.name,
+          mediumName: selectedMedium.value.instruction_medium,
+          standardName: selectedStandard.value.name,
+          subjectName: selectedSubject.value.name,
+        }),
+      })
+    }
     
     // After data is loaded, reinitialize sortable
     // Using setTimeout to ensure DOM has updated
@@ -372,10 +388,10 @@ const initializeSortable = () => {
   const mainList = document.getElementById('sortable-list') as SortableElement
   mainList?._sortable?.destroy()
   
-  document.querySelectorAll('.sortable-list').forEach((list) => {
+  for (const list of document.querySelectorAll('.sortable-list')) {
     const sortableList = list as SortableListElement
     sortableList._sortable?.destroy()
-  })
+  }
   
   // Initialize main chapter list sortable
   if (mainList) {
@@ -392,7 +408,7 @@ const initializeSortable = () => {
   }
 
   // Initialize topic lists sortable
-  document.querySelectorAll('.sortable-list').forEach((list) => {
+  for (const list of document.querySelectorAll('.sortable-list')) {
     const sortableList = list as SortableListElement
     const topicSortable = new Sortable(list as HTMLElement, {
       animation: 150,
@@ -404,7 +420,7 @@ const initializeSortable = () => {
     
     // Store sortable instance reference on the DOM element
     sortableList._sortable = topicSortable
-  })
+  }
 }
 
 const toggleQuickEdit = () => {
@@ -419,28 +435,34 @@ const toggleChapter = (chapterId: number) => {
 }
 
 const navigateToAddChapter = () => {
-  // Implement navigation to add chapter form
   router.push({
     name: 'addChapter',
-    query: {
+    query: boardSyllabusQueryString({
       board: selectedBoard.value?.id,
       medium: selectedMedium.value?.id,
       standard: selectedStandard.value?.id,
       subject: selectedSubject.value?.id,
-    },
+      boardName: selectedBoard.value?.name,
+      mediumName: selectedMedium.value?.instruction_medium,
+      standardName: selectedStandard.value?.name,
+      subjectName: selectedSubject.value?.name,
+    }),
   })
 }
 
 const editChapter = (chapter: ChapterData) => {
-  // Navigate to edit chapter form using a full path instead of route name
   router.push({
     path: `/admin/syllabus/chapter/${chapter.id}/edit`,
-    query: {
+    query: boardSyllabusQueryString({
       board: selectedBoard.value?.id,
       medium: selectedMedium.value?.id,
       standard: selectedStandard.value?.id,
       subject: selectedSubject.value?.id,
-    },
+      boardName: selectedBoard.value?.name,
+      mediumName: selectedMedium.value?.instruction_medium,
+      standardName: selectedStandard.value?.name,
+      subjectName: selectedSubject.value?.name,
+    }),
   })
 }
 
@@ -487,10 +509,10 @@ const deleteChapter = async () => {
 
 const handleChapterReorder = async ({ item, newIndex }: Sortable.SortableEvent) => {
   try {
-    if (typeof newIndex === 'undefined') return
+    if (newIndex === undefined) return
 
     // Get the chapter ID from the dragged item
-    const chapterId = Number(item.getAttribute('data-chapter-id'))
+    const chapterId = Number(item.dataset.chapterId ?? null)
 
     // Make API call to update only the dragged chapter's position
     await axiosInstance.put(`/chapters/reorder/${chapterId}`, {
@@ -528,14 +550,14 @@ const handleChapterReorder = async ({ item, newIndex }: Sortable.SortableEvent) 
 
 const handleTopicReorder = async ({ item, newIndex }: Sortable.SortableEvent) => {
   try {
-    if (typeof newIndex === 'undefined') return
+    if (newIndex === undefined) return
 
     // Get the parent chapter element and IDs
     const chapterElement = item.closest('.collapse')
     if (!chapterElement) return
 
     const chapterId = Number(chapterElement.id.replace('chapter-', ''))
-    const topicId = Number(item.getAttribute('data-topic-id'))
+    const topicId = Number(item.dataset.topicId ?? null)
 
     if (!topicId) {
       throw new Error('Failed to find topic ID')

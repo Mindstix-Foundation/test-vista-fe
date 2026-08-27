@@ -13,9 +13,9 @@
     <!-- Loading state -->
     <div v-if="loading" class="row justify-content-center my-5">
       <div class="col-12 text-center">
-        <div class="spinner-border text-primary" role="status">
+        <output class="spinner-border text-primary">
           <span class="visually-hidden">Loading...</span>
-        </div>
+        </output>
       </div>
     </div>
 
@@ -164,7 +164,7 @@
             <!-- Action Buttons -->
             <div class="row mt-4">
               <div class="col-12">
-                <div class="d-flex justify-content-end gap-2">
+                <div class="d-flex justify-content-end gap-2 flex-wrap">
                   <button
                     type="button"
                     class="btn btn-dark"
@@ -178,6 +178,18 @@
                     Logout <i class="bi bi-box-arrow-right"></i>
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <div class="row mt-4 pt-3 border-top">
+              <div class="col-12">
+                <h6 class="text-danger fw-bold mb-1">Danger zone</h6>
+                <p class="text-muted small mb-2">
+                  Permanently delete your account and personal data. This cannot be undone.
+                </p>
+                <button type="button" class="btn btn-outline-danger btn-sm" @click="openDeleteAccountModal">
+                  Delete account
+                </button>
               </div>
             </div>
           </div>
@@ -214,6 +226,56 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete Account Modal -->
+    <div
+      class="modal fade"
+      id="deleteAccountModal"
+      tabindex="-1"
+      aria-labelledby="deleteAccountModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title text-danger" id="deleteAccountModalLabel">Delete account</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small mb-3">
+              This permanently deletes your account. Enter your password to confirm.
+            </p>
+            <div class="mb-2">
+              <label class="form-label small" for="studentDeletePassword">Password</label>
+              <input
+                id="studentDeletePassword"
+                type="password"
+                class="form-control"
+                v-model="deletePassword"
+                autocomplete="current-password"
+                placeholder="Enter your password"
+              />
+            </div>
+            <div v-if="deleteError" class="alert alert-danger py-2 small mb-0">{{ deleteError }}</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Cancel</button>
+            <button
+              type="button"
+              class="btn btn-danger"
+              :disabled="deleteSubmitting || !deletePassword"
+              @click="confirmDeleteAccount"
+            >
+              <output
+                v-if="deleteSubmitting"
+                class="spinner-border spinner-border-sm me-1"
+              ></output>
+              Delete permanently
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -227,6 +289,10 @@ import axiosInstance from '@/config/axios'
 const router = useRouter()
 const authStore = useAuthStore()
 const logoutModal = ref<Modal | null>(null)
+const deleteAccountModal = ref<Modal | null>(null)
+const deletePassword = ref('')
+const deleteError = ref('')
+const deleteSubmitting = ref(false)
 
 // Define interfaces based on API response
 interface Role {
@@ -317,6 +383,33 @@ const showLogoutModal = () => {
   logoutModal.value?.show()
 }
 
+const openDeleteAccountModal = () => {
+  deletePassword.value = ''
+  deleteError.value = ''
+  deleteAccountModal.value?.show()
+}
+
+const confirmDeleteAccount = async () => {
+  deleteError.value = ''
+  if (!deletePassword.value) return
+  deleteSubmitting.value = true
+  try {
+    await axiosInstance.delete('/users/me', {
+      data: { password: deletePassword.value, mode: 'simple' },
+    })
+    deleteAccountModal.value?.hide()
+    authStore.clearAuth()
+    localStorage.clear()
+    await router.push('/login')
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string | string[] } } }
+    const msg = err?.response?.data?.message
+    deleteError.value = Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to delete account'
+  } finally {
+    deleteSubmitting.value = false
+  }
+}
+
 /**
  * Handle user logout
  */
@@ -359,13 +452,13 @@ const cleanupSpecificModal = () => {
     
     // Only clean up our specific modal backdrop
     const backdrops = document.querySelectorAll('.modal-backdrop')
-    backdrops.forEach(backdrop => {
+    for (const backdrop of backdrops) {
       // Check if this backdrop is related to our modal
       const modals = document.querySelectorAll('.modal.show')
       if (modals.length === 0) {
         backdrop.remove()
       }
-    })
+    }
     
     // Only remove modal-open if no other modals are active
     const activeModals = document.querySelectorAll('.modal.show')
@@ -388,13 +481,15 @@ const handleChangePassword = () => {
 
 // Initialize modal and fetch profile data on mount
 onMounted(() => {
-  // Initialize the logout modal
   const modalElement = document.getElementById('logoutModal')
   if (modalElement) {
     logoutModal.value = new Modal(modalElement)
   }
-  
-  // Fetch profile data
+  const deleteModalEl = document.getElementById('deleteAccountModal')
+  if (deleteModalEl) {
+    deleteAccountModal.value = new Modal(deleteModalEl)
+  }
+
   fetchProfileData()
 })
 
@@ -407,7 +502,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .student-profile {
   background-color: #f8f9fa;
-  min-height: calc(100vh - 76px);
+  min-height: calc(100vh - var(--topbar-height, 56px));
 }
 
 .card {

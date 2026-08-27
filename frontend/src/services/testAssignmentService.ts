@@ -17,6 +17,37 @@ export interface StudentAssignedTest {
   test_attempt_id?: number
 }
 
+export interface StudentPastResult {
+  result_id: number
+  test_attempt_id: number
+  assignment_id: number
+  title: string
+  source: 'SMART' | 'ASSIGNED'
+  subject: string
+  standard: string
+  exam_program: string | null
+  attempt_number: number
+  total_questions: number
+  correct_answers: number
+  total_marks: number
+  obtained_marks: number
+  percentage: number
+  performance_level: string
+  time_taken_seconds: number
+  submitted_at: string
+}
+
+export interface InstructionSection {
+  id: number
+  name: string
+  sequence_number: number
+  total_questions: number
+  marks_per_question: number
+  time_limit_minutes?: number | null
+  qualifying_marks?: number | null
+  answer_format: 'MCQ' | 'NUMERIC' | 'TEXT' | 'MATCH_PAIR'
+}
+
 export interface ExamInstructions {
   id: number
   title: string
@@ -33,6 +64,9 @@ export interface ExamInstructions {
   available_from: Date
   due_date: Date
   status: string
+  exam_program?: string | null
+  exam_category?: string | null
+  sections?: InstructionSection[]
 }
 
 export interface ExamQuestion {
@@ -49,6 +83,21 @@ export interface ExamQuestion {
   question_order: number
   marks: number
   is_mandatory: boolean
+  question_group_id?: number | null
+  group_order?: number | null
+  passage_text?: string | null
+  passage_image?: string | null
+}
+
+export interface ExamTemplateSection {
+  id: number
+  name: string
+  sequence_number: number
+  total_questions: number
+  marks_per_question: number
+  time_limit_minutes?: number | null
+  qualifying_marks?: number | null
+  answer_format: 'MCQ' | 'NUMERIC' | 'TEXT' | 'MATCH_PAIR'
 }
 
 export interface ExamData {
@@ -62,6 +111,7 @@ export interface ExamData {
   instructions?: string
   negative_marking: boolean
   negative_marks_per_question?: number
+  sections?: ExamTemplateSection[]
   questions: ExamQuestion[]
   start_time: Date
   attempt_number: number
@@ -75,6 +125,24 @@ export interface TestAttemptStatus {
   time_remaining_seconds?: number
   questions_answered: number
   total_questions: number
+}
+
+export interface SectionScore {
+  name: string
+  obtained: number
+  total: number
+  attempted: number
+  questions: number
+  qualifying_marks: number | null
+  qualified: boolean | null
+}
+
+/** Backend stores section scores as a map keyed by section id; normalize to an array for the UI. */
+function normalizeSectionScores(raw: unknown): SectionScore[] | undefined {
+  if (!raw) return undefined
+  if (Array.isArray(raw)) return raw as SectionScore[]
+  if (typeof raw === 'object') return Object.values(raw as Record<string, SectionScore>)
+  return undefined
 }
 
 export interface ExamResult {
@@ -95,6 +163,11 @@ export interface ExamResult {
   time_taken_seconds: number
   performance_level: string
   chapter_wise_analysis?: any
+  section_wise_scores?: SectionScore[]
+  overall_qualified?: boolean | null
+  rank?: number
+  total_participants?: number
+  percentile?: number
   strengths?: string[]
   weaknesses?: string[]
   recommendations?: string[]
@@ -121,6 +194,11 @@ export interface DetailedReport {
 }
 
 class TestAssignmentService {
+  async getStudentPastResults(): Promise<StudentPastResult[]> {
+    const response = await axiosInstance.get('/test-assignments/student/my-results')
+    return response.data
+  }
+
   async getStudentAssignedTests(status?: string): Promise<StudentAssignedTest[]> {
     try {
       const params = status ? `?status=${status}` : ''
@@ -169,6 +247,7 @@ class TestAssignmentService {
     question_id: number
     question_text_id: number
     selected_option_id?: number
+    numeric_answer?: number
     time_spent_seconds?: number
     is_flagged?: boolean
   }): Promise<{ message: string }> {
@@ -196,7 +275,11 @@ class TestAssignmentService {
   async getExamResult(attemptId: number): Promise<ExamResult> {
     try {
       const response = await axiosInstance.get(`/test-assignments/student/exam/${attemptId}/result`)
-      return response.data
+      const data = response.data as ExamResult
+      return {
+        ...data,
+        section_wise_scores: normalizeSectionScores(data.section_wise_scores),
+      }
     } catch (error) {
       console.error('Error fetching exam result:', error)
       throw new Error('Failed to fetch exam result. Please try again.')

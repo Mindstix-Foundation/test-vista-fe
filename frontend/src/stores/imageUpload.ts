@@ -28,7 +28,7 @@ export const useImageUploadStore = defineStore('imageUpload', () => {
 
   // Generate temporary ID for local storage
   const generateTempId = (): string => {
-    return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    return `temp_${Date.now()}_${crypto.randomUUID()}`
   }
 
   // Set question image
@@ -101,7 +101,7 @@ export const useImageUploadStore = defineStore('imageUpload', () => {
     }
 
     // Update option images
-    for (const [index, imageData] of currentQuestionImages.value.optionImages.entries()) {
+    for (const imageData of currentQuestionImages.value.optionImages.values()) {
       if (imageData.id === tempId) {
         imageData.uploadedId = uploadedId
         break

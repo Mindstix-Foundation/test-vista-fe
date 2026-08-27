@@ -83,7 +83,7 @@ export const usePatternStore = defineStore('pattern', {
 
       // Find the highest sequence number from existing sections
       const highestSequenceNumber = this.sections.reduce((max, section) => {
-        return section.seqencial_section_number > max ? section.seqencial_section_number : max
+        return Math.max(section.seqencial_section_number, max)
       }, 0);
 
       // Use provided sequence number or calculate the next one

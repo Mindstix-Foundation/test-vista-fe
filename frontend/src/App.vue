@@ -1,22 +1,37 @@
 <template>
   <ToastNotification />
   <RouterView v-slot="{ Component, route }">
-    <keep-alive :include="['EditPattern', 'EditSection']">
-      <component
-        :is="Component"
-        :key="route.name === 'editPattern' && route.query.from === 'editSection'
-          ? `${route.name}-${route.params.id}`
-          : route.fullPath"
-      />
+    <keep-alive :include="['EditPattern', 'EditSection', 'EditExamPaperTemplate']">
+      <component :is="Component" :key="routeViewKey(route)" />
     </keep-alive>
   </RouterView>
 </template>
 
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, type RouteLocationNormalizedLoaded } from 'vue-router'
 import ToastNotification from '@/components/common/ToastNotification.vue'
 import { onMounted } from 'vue'
 import { useMobileScrollFix } from '@/utils/mobileScrollFix'
+
+const QUERY_STABLE_ROUTE_NAMES = new Set([
+  'patternDashboard',
+  'questionBank',
+  'questionDashboard',
+  'SyllabusDashboard',
+])
+
+function routeViewKey(route: RouteLocationNormalizedLoaded) {
+  if (route.name === 'editPattern' && route.query.from === 'editSection') {
+    return `${route.name}-${route.params.id}`
+  }
+  if (route.name === 'editExamPattern') {
+    return `${route.name}-${route.params.id}`
+  }
+  if (route.name && QUERY_STABLE_ROUTE_NAMES.has(String(route.name))) {
+    return String(route.name)
+  }
+  return route.fullPath
+}
 
 // Fix for mobile scrolling issues - only apply on mobile devices
 const { applyFixes, enableScrolling, isMobile } = useMobileScrollFix()

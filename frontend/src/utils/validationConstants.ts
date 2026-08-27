@@ -108,7 +108,7 @@ export const validateContactNumber = (number: string): boolean => {
   if (!number) return false
   
   // Remove all non-digit characters for validation
-  const cleaned = number.replace(/\D/g, '')
+  const cleaned = number.replaceAll(/\D/g, '')
   
   // Handle both formats:
   // 1. Plain 10-digit number (6-9 followed by 9 digits)
@@ -130,7 +130,7 @@ export const formatContactNumber = (number: string): string => {
   if (!number) return ''
   
   // Remove all non-digit characters
-  const cleaned = number.replace(/\D/g, '')
+  const cleaned = number.replaceAll(/\D/g, '')
   
   // Return the cleaned number as-is (don't limit to 10 digits for display)
   return cleaned
@@ -141,7 +141,7 @@ export const formatContactNumberForAPI = (number: string): string => {
   if (!number) return ''
   
   // Remove all non-digit characters
-  const cleaned = number.replace(/\D/g, '')
+  const cleaned = number.replaceAll(/\D/g, '')
   
   // Handle different formats:
   if (cleaned.length === 10) {
@@ -156,8 +156,22 @@ export const formatContactNumberForAPI = (number: string): string => {
   return cleaned
 }
 
-// Email validation function
+// Email validation without backtracking-prone regex (Sonar S5852)
 export const validateEmail = (email: string): boolean => {
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
-  return emailRegex.test(email)
+  const value = String(email).trim().toLowerCase()
+  if (value.length < 5 || value.length > 254) return false
+
+  const at = value.indexOf('@')
+  if (at < 1 || at !== value.lastIndexOf('@')) return false
+
+  const local = value.slice(0, at)
+  const domain = value.slice(at + 1)
+  if (!local || !domain || local.includes(' ') || domain.includes(' ')) return false
+  if (domain.startsWith('.') || domain.endsWith('.') || domain.includes('..')) return false
+
+  const lastDot = domain.lastIndexOf('.')
+  if (lastDot < 1 || lastDot === domain.length - 1) return false
+
+  const tld = domain.slice(lastDot + 1)
+  return tld.length >= 2
 } 

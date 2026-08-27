@@ -1,10 +1,11 @@
 <template>
   <div class="take-exam-container">
+    <AppBreadcrumb />
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
-      <div class="spinner-border text-primary" role="status">
+      <output class="spinner-border text-primary">
         <span class="visually-hidden">Loading exam...</span>
-      </div>
+      </output>
       <p class="loading-text">Loading exam questions...</p>
     </div>
 
@@ -87,6 +88,25 @@
         </div>
       </div>
 
+      <!-- Section Banner (Option C: sectional exams like Banking / CSAT) -->
+      <div v-if="currentSection" class="section-banner">
+        <div class="container-fluid d-flex align-items-center justify-content-between flex-wrap">
+          <div>
+            <i class="bi bi-collection me-1"></i>
+            <strong>{{ currentSection.name }}</strong>
+            <span class="ms-2 small">
+              ({{ currentSection.total_questions }} questions ·
+              {{ currentSection.marks_per_question }} mark(s) each<template v-if="currentSection.qualifying_marks">
+                · cutoff {{ currentSection.qualifying_marks }}</template>)
+            </span>
+          </div>
+          <div v-if="sectionalMode" class="section-timer" :class="{ 'text-danger': sectionTimeRemaining <= 60 }">
+            <i class="bi bi-hourglass-split me-1"></i>
+            Section time: {{ formattedSectionTime }}
+          </div>
+        </div>
+      </div>
+
       <!-- Main Content -->
       <div class="exam-content">
         <!-- Question Panel -->
@@ -104,6 +124,28 @@
             </div>
           </div>
           
+          <!-- Shared passage for linked MCQs (visible on every child) -->
+          <div
+            v-if="currentQuestion?.passage_text"
+            class="passage-panel mb-3"
+          >
+            <div class="passage-label">
+              <i class="bi bi-book me-1"></i>
+              Passage
+              <span v-if="currentQuestion.group_order" class="ms-1 text-muted">
+                (Part {{ currentQuestion.group_order }})
+              </span>
+            </div>
+            <div class="passage-text" v-html="currentQuestion.passage_text"></div>
+            <div v-if="currentQuestion.passage_image" class="passage-image mt-2">
+              <img
+                :src="currentQuestion.passage_image"
+                alt="Passage"
+                class="img-fluid"
+              />
+            </div>
+          </div>
+
           <div class="question-text" v-if="currentQuestion" v-html="currentQuestion.question_text"></div>
           
           <!-- Question Image -->
@@ -111,7 +153,25 @@
             <img :src="currentQuestion.question_image" :alt="'Question ' + (currentQuestionIndex + 1)" class="img-fluid">
           </div>
 
-          <div class="option-container" v-if="currentQuestion">
+          <!-- NAT (Numerical Answer Type) input — JEE style -->
+          <div v-if="currentQuestion && isNatQuestion" class="nat-container">
+            <label class="nat-label" for="nat-answer-input">
+              <i class="bi bi-123 me-1"></i>
+              Enter your numerical answer:
+            </label>
+            <input
+              id="nat-answer-input"
+              type="number"
+              step="any"
+              class="form-control nat-input"
+              :value="natAnswers[currentQuestionIndex] ?? ''"
+              placeholder="e.g. 42.5"
+              @change="onNatInput(($event.target as HTMLInputElement).value)"
+            />
+            <small class="text-muted">Decimal values are allowed. No options — type the exact value.</small>
+          </div>
+
+          <div class="option-container" v-else-if="currentQuestion">
             <div 
               v-for="(option, index) in currentQuestion.options"
               :key="index"
@@ -140,7 +200,7 @@
               <button 
                 class="btn btn-clear" 
                 @click="clearAnswer"
-                :disabled="!answers[currentQuestionIndex]"
+                :disabled="answers[currentQuestionIndex] === undefined && natAnswers[currentQuestionIndex] === undefined"
               >
                 <i class="bi bi-x-circle"></i> Clear Response
               </button>
@@ -160,7 +220,7 @@
                 @click="saveAndNext"
                 :disabled="isSubmittingAnswer"
               >
-                <span v-if="isSubmittingAnswer" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <output v-if="isSubmittingAnswer" class="spinner-border spinner-border-sm me-2"></output>
                 {{ currentQuestionIndex === questions.length - 1 ? 'Finish' : 'Next' }} 
                 <i class="bi bi-arrow-right" v-if="!isSubmittingAnswer"></i>
               </button>
@@ -245,7 +305,7 @@
               @click="showSubmitConfirmation = true"
               :disabled="isSubmittingExam"
             >
-              <span v-if="isSubmittingExam" class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <output v-if="isSubmittingExam" class="spinner-border spinner-border-sm me-2"></output>
               {{ isSubmittingExam ? 'Submitting...' : 'Submit Exam' }}
             </button>
           </div>
@@ -338,7 +398,7 @@
                 @click="submitExam"
                 :disabled="isSubmittingExam"
               >
-                <span v-if="isSubmittingExam" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <output v-if="isSubmittingExam" class="spinner-border spinner-border-sm me-2"></output>
                 {{ isSubmittingExam ? 'Submitting...' : 'Yes, Submit' }}
               </button>
             </div>
@@ -400,6 +460,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import testAssignmentService from '@/services/testAssignmentService'
+import AppBreadcrumb from '@/components/common/AppBreadcrumb.vue'
 
 // Types
 interface ExamData {
@@ -420,6 +481,11 @@ interface Question {
   question_image?: string
   options: string[]
   option_ids?: number[]
+  section_id?: number
+  question_group_id?: number | null
+  group_order?: number | null
+  passage_text?: string | null
+  passage_image?: string | null
 }
 
 interface FullscreenElement extends HTMLElement {
@@ -443,20 +509,26 @@ const attemptId = ref<number | null>(null)
 const currentQuestionIndex = ref(0)
 const questions = ref<Question[]>([])
 const answers = reactive<{ [key: number]: number }>({})
+// NAT (numeric) answers keyed by question index — Option C mixed papers
+const natAnswers = reactive<{ [key: number]: string }>({})
+// Sectional timing state (Option C: Banking-style per-section timers)
+const sectionTimeRemaining = ref(0)
+const sectionTimer = ref<ReturnType<typeof setInterval> | null>(null)
+const expiredSectionIds = ref(new Set<number>())
 const markedQuestions = ref(new Set<number>())
 const visitedQuestions = ref(new Set<number>())
 const timeRemaining = ref(0)
-const timer = ref<NodeJS.Timeout | null>(null)
+const timer = ref<ReturnType<typeof setInterval> | null>(null)
 const questionStartTime = ref(0)
 const questionTimeSpent = ref<{ [key: number]: number }>({})
 const currentQuestionTime = ref(0)
-const questionTimer = ref<NodeJS.Timeout | null>(null)
-const autoSaveTimer = ref<NodeJS.Timeout | null>(null)
+const questionTimer = ref<ReturnType<typeof setInterval> | null>(null)
+const autoSaveTimer = ref<ReturnType<typeof setInterval> | null>(null)
 const showFullscreenWarning = ref(false)
 const studentName = ref('')
 const showExitWarning = ref(false)
 const showSubmitConfirmation = ref(false)
-const fullscreenChecker = ref<NodeJS.Timeout | null>(null)
+const fullscreenChecker = ref<ReturnType<typeof setInterval> | null>(null)
 const showRecoveryNotification = ref(false)
 
 // Device detection
@@ -477,16 +549,16 @@ const syncInProgress = ref(false)
 // Network status monitoring
 const handleOnlineStatus = () => {
   isOnline.value = navigator.onLine
-  if (!isOnline.value) {
-    showOfflineWarning.value = true
-    console.warn('Device went offline during exam')
-  } else {
+  if (isOnline.value) {
     showOfflineWarning.value = false
     console.log('Device back online')
     // Try to save state when back online
     saveExamState()
     // Sync pending answers when connection is restored
     syncPendingAnswers()
+  } else {
+    showOfflineWarning.value = true
+    console.warn('Device went offline during exam')
   }
 }
 
@@ -527,6 +599,51 @@ const syncPendingAnswers = async () => {
   saveExamState()
 }
 
+const writeExamStateToStorage = (storageKey: string, stateString: string) => {
+  if (typeof Storage === 'undefined') {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(storageKey, stateString)
+      console.log('Exam state saved to sessionStorage (fallback)')
+    }
+    return
+  }
+  localStorage.setItem('test_storage', 'test')
+  localStorage.removeItem('test_storage')
+  localStorage.setItem(storageKey, stateString)
+  console.log('Exam state saved to localStorage')
+}
+
+const clearOtherExamStates = (keepKey: string) => {
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith('exam_state_') && key !== keepKey) {
+      localStorage.removeItem(key)
+    }
+  }
+}
+
+const handleSaveExamStateError = (error: any, examState: Record<string, unknown>, storageKey: string) => {
+  if (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+    console.warn('Storage quota exceeded, clearing old data and retrying...')
+    try {
+      clearOtherExamStates(storageKey)
+      localStorage.setItem(storageKey, JSON.stringify(examState))
+      console.log('Exam state saved after clearing old data')
+    } catch (retryError) {
+      console.error('Failed to save exam state even after clearing old data:', retryError)
+      if (Object.keys(answers).length > 0) {
+        console.warn('Unable to save exam progress locally. Please ensure you have a stable connection.')
+      }
+    }
+    return
+  }
+  if (error.name === 'SecurityError') {
+    console.warn('Storage access blocked (private browsing mode?)')
+    return
+  }
+  console.error('Unknown storage error:', error)
+}
+
 // State persistence functions
 const saveExamState = () => {
   if (!attemptId.value) return
@@ -535,63 +652,22 @@ const saveExamState = () => {
     attemptId: attemptId.value,
     currentQuestionIndex: currentQuestionIndex.value,
     answers: { ...answers },
+    natAnswers: { ...natAnswers },
+    expiredSectionIds: Array.from(expiredSectionIds.value),
+    sectionTimeRemaining: sectionTimeRemaining.value,
     markedQuestions: Array.from(markedQuestions.value),
     visitedQuestions: Array.from(visitedQuestions.value),
     timeRemaining: timeRemaining.value,
     questionTimeSpent: questionTimeSpent.value,
-    pendingAnswers: Array.from(pendingAnswers.value.entries()), // Save pending answers
+    pendingAnswers: Array.from(pendingAnswers.value.entries()),
     timestamp: Date.now()
   }
   
   try {
-    const stateString = JSON.stringify(examState)
-    
-    // Check if localStorage is available and has enough space
-    if (typeof Storage !== 'undefined') {
-      // Test localStorage availability (might fail in private mode)
-      localStorage.setItem('test_storage', 'test')
-      localStorage.removeItem('test_storage')
-      
-      // Try to save the state
-      localStorage.setItem(`exam_state_${attemptId.value}`, stateString)
-    console.log('Exam state saved to localStorage')
-    } else {
-      console.warn('localStorage not available, state not saved')
-      // Fallback: try to use sessionStorage
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem(`exam_state_${attemptId.value}`, stateString)
-        console.log('Exam state saved to sessionStorage (fallback)')
-      }
-    }
+    writeExamStateToStorage(`exam_state_${attemptId.value}`, JSON.stringify(examState))
   } catch (error) {
     console.error('Failed to save exam state:', error)
-    
-    // Handle quota exceeded error (common on mobile)
-    if (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-      console.warn('Storage quota exceeded, clearing old data and retrying...')
-      try {
-        // Clear old exam states to free up space
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key && key.startsWith('exam_state_') && key !== `exam_state_${attemptId.value}`) {
-            localStorage.removeItem(key)
-          }
-        }
-        // Retry saving
-        localStorage.setItem(`exam_state_${attemptId.value}`, JSON.stringify(examState))
-        console.log('Exam state saved after clearing old data')
-      } catch (retryError) {
-        console.error('Failed to save exam state even after clearing old data:', retryError)
-        // Show user warning about potential data loss
-        if (Object.keys(answers).length > 0) {
-          console.warn('Unable to save exam progress locally. Please ensure you have a stable connection.')
-        }
-      }
-    } else if (error.name === 'SecurityError') {
-      console.warn('Storage access blocked (private browsing mode?)')
-    } else {
-      console.error('Unknown storage error:', error)
-    }
+    handleSaveExamStateError(error, examState, `exam_state_${attemptId.value}`)
   }
 }
 
@@ -617,6 +693,11 @@ const loadExamState = (): boolean => {
     // Restore state
     currentQuestionIndex.value = examState.currentQuestionIndex || 0
     Object.assign(answers, examState.answers || {})
+    Object.assign(natAnswers, examState.natAnswers || {})
+    expiredSectionIds.value = new Set(examState.expiredSectionIds || [])
+    if (examState.sectionTimeRemaining !== undefined && examState.sectionTimeRemaining > 0) {
+      sectionTimeRemaining.value = examState.sectionTimeRemaining
+    }
     markedQuestions.value = new Set(examState.markedQuestions || [])
     visitedQuestions.value = new Set(examState.visitedQuestions || [])
     questionTimeSpent.value = examState.questionTimeSpent || {}
@@ -699,7 +780,7 @@ const handleBeforeUnload = (event: BeforeUnloadEvent) => {
 // Methods
 const detectDevice = () => {
   const userAgent = navigator.userAgent.toLowerCase()
-  isIOSDevice.value = /iphone|ipod/.test(userAgent) && !window.MSStream
+  isIOSDevice.value = /iphone|ipod/.test(userAgent) && !globalThis.MSStream
   
   // Check if fullscreen API is actually supported
   const element = document.documentElement as FullscreenElement
@@ -713,14 +794,94 @@ const detectDevice = () => {
   if (isIOSDevice.value) {
     isFullscreenSupported.value = false
   }
+
+  // Instructions page may have set bypass when requestFullscreen failed
+  if (sessionStorage.getItem('examFullscreenBypass') === '1') {
+    isFullscreenSupported.value = false
+  }
 }
 
 // Computed properties
 const currentQuestion = computed(() => questions.value[currentQuestionIndex.value])
-const answeredCount = computed(() => Object.keys(answers).length)
+const answeredCount = computed(() => {
+  const mcq = Object.keys(answers).length
+  const nat = Object.keys(natAnswers).filter((k) => natAnswers[Number(k)] !== '').length
+  return mcq + nat
+})
 const progressPercentage = computed(() => 
   questions.value.length > 0 ? (answeredCount.value / questions.value.length) * 100 : 0
 )
+
+// ---------- Option C: template sections (NAT + sectional timing) ----------
+const templateSections = computed(() => {
+  const sections = (examData.value as any)?.sections ?? []
+  return [...sections].sort((a: any, b: any) => a.sequence_number - b.sequence_number)
+})
+
+const sectionById = (id?: number) =>
+  id !== undefined && id !== null
+    ? templateSections.value.find((s: any) => s.id === id)
+    : undefined
+
+const currentSection = computed(() => sectionById(currentQuestion.value?.section_id))
+
+// Sectional mode: at least one section carries its own timer
+const sectionalMode = computed(() =>
+  templateSections.value.some((s: any) => s.time_limit_minutes),
+)
+
+const isNatQuestion = computed(() => currentSection.value?.answer_format === 'NUMERIC')
+
+const formattedSectionTime = computed(() => {
+  const minutes = Math.floor(sectionTimeRemaining.value / 60)
+  const seconds = sectionTimeRemaining.value % 60
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+})
+
+const isQuestionLocked = (index: number) => {
+  if (!sectionalMode.value) return false
+  const sectionId = questions.value[index]?.section_id
+  if (sectionId === undefined || sectionId === null) return false
+  // Expired sections are locked; future navigation stays open
+  return expiredSectionIds.value.has(sectionId)
+}
+
+const startSectionTimer = () => {
+  if (!sectionalMode.value || !currentSection.value?.time_limit_minutes) return
+  stopSectionTimer()
+  sectionTimeRemaining.value = currentSection.value.time_limit_minutes * 60
+  sectionTimer.value = setInterval(() => {
+    sectionTimeRemaining.value--
+    if (sectionTimeRemaining.value <= 0) {
+      onSectionExpired()
+    }
+  }, 1000)
+}
+
+const stopSectionTimer = () => {
+  if (sectionTimer.value) {
+    clearInterval(sectionTimer.value)
+    sectionTimer.value = null
+  }
+}
+
+const onSectionExpired = () => {
+  stopSectionTimer()
+  const expiredId = currentSection.value?.id
+  if (expiredId !== undefined) {
+    expiredSectionIds.value.add(expiredId)
+    expiredSectionIds.value = new Set(expiredSectionIds.value)
+  }
+  // Jump to the first question of the next non-expired section
+  const nextIndex = questions.value.findIndex(
+    (q) => q.section_id !== undefined && q.section_id !== null && !expiredSectionIds.value.has(q.section_id),
+  )
+  if (nextIndex >= 0) {
+    loadQuestion(nextIndex)
+    startSectionTimer()
+  }
+  // All sections done: student can submit via the regular flow
+}
 
 const formattedTime = computed(() => {
   const hours = Math.floor(timeRemaining.value / 3600)
@@ -742,89 +903,83 @@ const formatQuestionTime = (seconds: number) => {
   return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
+const applyTimerFromApi = (examResponse: Record<string, any>) => {
+  console.log('Setting timer from API response (no saved state or expired)')
+  if ('timeRemaining' in examResponse && examResponse.timeRemaining !== undefined) {
+    timeRemaining.value = examResponse.timeRemaining
+    console.log('Using backend-provided timeRemaining:', examResponse.timeRemaining)
+    return
+  }
+  if ('duration_minutes' in examResponse && examResponse.duration_minutes) {
+    timeRemaining.value = examResponse.duration_minutes * 60
+    console.log('Using calculated timeRemaining from duration:', timeRemaining.value)
+    return
+  }
+  timeRemaining.value = 3600
+  console.log('Using default timeRemaining:', timeRemaining.value)
+}
+
+const syncTimerWithBackend = (examResponse: Record<string, any>) => {
+  console.log('Using restored timer from saved state:', timeRemaining.value)
+  if (!('timeRemaining' in examResponse) || examResponse.timeRemaining === undefined) return
+  const backendTime = examResponse.timeRemaining
+  const timeDifference = Math.abs(timeRemaining.value - backendTime)
+  if (timeDifference <= 30) return
+  console.log(`Time sync: Local time ${timeRemaining.value}s differs from backend ${backendTime}s by ${timeDifference}s. Using backend time.`)
+  timeRemaining.value = backendTime
+}
+
+const applyExamTimer = (examResponse: Record<string, any>, stateLoaded: boolean) => {
+  if (!stateLoaded || timeRemaining.value <= 0) {
+    applyTimerFromApi(examResponse)
+    return
+  }
+  syncTimerWithBackend(examResponse)
+}
+
 // Methods
 const initializeExam = async () => {
   try {
     isLoading.value = true
     error.value = ''
     
-    // Check for assignment ID in multiple query parameter names
     const assignmentId = Number(route.query.assignmentId) || Number(route.query.test)
     if (!assignmentId) {
       throw new Error('Assignment ID is required')
     }
 
-    // Start the exam
     const examResponse = await testAssignmentService.startExam(assignmentId)
     examData.value = examResponse
     attemptId.value = examResponse.attemptId
     questions.value = examResponse.questions
     
-    // Try to load saved state first
     const stateLoaded = loadExamState()
-    
-    // Set up timer ONLY if we haven't restored it from saved state
-    if (!stateLoaded || timeRemaining.value <= 0) {
-      console.log('Setting timer from API response (no saved state or expired)')
-      
-      // Prefer backend-provided timeRemaining for accurate time sync
-    if ('timeRemaining' in examResponse && examResponse.timeRemaining !== undefined) {
-      timeRemaining.value = examResponse.timeRemaining
-        console.log('Using backend-provided timeRemaining:', examResponse.timeRemaining)
-    } else if ('duration_minutes' in examResponse && examResponse.duration_minutes) {
-        // Fallback: Calculate time remaining based on duration
-      timeRemaining.value = examResponse.duration_minutes * 60
-        console.log('Using calculated timeRemaining from duration:', timeRemaining.value)
-    } else {
-      // Default to 1 hour if no duration specified
-      timeRemaining.value = 3600
-        console.log('Using default timeRemaining:', timeRemaining.value)
-      }
-    } else {
-      console.log('Using restored timer from saved state:', timeRemaining.value)
-      
-      // Optional: Sync with backend time if available and significantly different
-      if ('timeRemaining' in examResponse && examResponse.timeRemaining !== undefined) {
-        const backendTime = examResponse.timeRemaining
-        const timeDifference = Math.abs(timeRemaining.value - backendTime)
-        
-        // If difference is more than 30 seconds, use backend time (more reliable)
-        if (timeDifference > 30) {
-          console.log(`Time sync: Local time ${timeRemaining.value}s differs from backend ${backendTime}s by ${timeDifference}s. Using backend time.`)
-          timeRemaining.value = backendTime
-        }
-      }
-    }
+    applyExamTimer(examResponse, stateLoaded)
   
-    // Get student info from localStorage or API
     studentName.value = localStorage.getItem('studentName') ?? 'Student'
-  
-    // Start timer
     startTimer()
     
-    // If no saved state, initialize fresh
     if (!stateLoaded) {
-      // Mark first question as visited and start question timer
       visitedQuestions.value.add(0)
       currentQuestionIndex.value = 0
     }
     
-    // Always ensure current question is visited
+    if (sectionalMode.value) {
+      startSectionTimer()
+    }
+    
     visitedQuestions.value.add(currentQuestionIndex.value)
     questionStartTime.value = Date.now()
     currentQuestionTime.value = Math.floor((questionTimeSpent.value[currentQuestionIndex.value] ?? 0) / 1000)
     
-    // Start question timer
     questionTimer.value = setInterval(() => {
       currentQuestionTime.value++
     }, 1000)
     
-    // Enhanced auto-save with state persistence (every 10 seconds for better reliability)
     autoSaveTimer.value = setInterval(async () => {
       await saveCurrentAnswerWithState()
     }, 10000)
     
-    // Periodic retry for pending answers (every 30 seconds)
     const pendingSyncTimer = setInterval(async () => {
       if (isOnline.value && pendingAnswers.value.size > 0 && !syncInProgress.value) {
         console.log(`Periodic retry: Found ${pendingAnswers.value.size} pending answers. Attempting sync...`)
@@ -832,22 +987,15 @@ const initializeExam = async () => {
       }
     }, 30000)
     
-    // Store timer reference for cleanup
-    if (!window.examTimers) {
-      window.examTimers = []
+    if (!globalThis.examTimers) {
+      globalThis.examTimers = []
     }
-    window.examTimers.push(pendingSyncTimer)
+    globalThis.examTimers.push(pendingSyncTimer)
     
-    // Check fullscreen
     checkFullscreen()
-    
-    // Start periodic fullscreen monitoring
     startFullscreenMonitoring()
-    
-    // Save initial state
     saveExamState()
     
-    // Sync any pending answers from previous session
     if (pendingAnswers.value.size > 0) {
       console.log(`Found ${pendingAnswers.value.size} pending answers from previous session. Starting sync...`)
       syncPendingAnswers()
@@ -875,6 +1023,12 @@ const retryLoadExam = () => {
 const loadQuestion = async (index: number) => {
   if (index < 0 || index >= questions.value.length) return
   
+  // Sectional exams: expired sections cannot be revisited
+  if (isQuestionLocked(index)) {
+    console.warn('Section for question', index + 1, 'has expired — navigation blocked')
+    return
+  }
+  
   // Save current answer before navigating away
   await saveCurrentAnswerWithState()
   
@@ -892,9 +1046,25 @@ const loadQuestion = async (index: number) => {
     clearInterval(questionTimer.value)
   }
   
+  const previousSectionId = questions.value[currentQuestionIndex.value]?.section_id
+  
   currentQuestionIndex.value = index
   questionStartTime.value = Date.now()
   visitedQuestions.value.add(index)
+  
+  // Sectional exams: crossing into a new section locks the previous one
+  // (strict Banking/CSAT behavior) and restarts the section countdown
+  const newSectionId = questions.value[index]?.section_id
+  if (
+    sectionalMode.value &&
+    previousSectionId !== undefined &&
+    newSectionId !== undefined &&
+    previousSectionId !== newSectionId
+  ) {
+    expiredSectionIds.value.add(previousSectionId)
+    expiredSectionIds.value = new Set(expiredSectionIds.value)
+    startSectionTimer()
+  }
   
   // Initialize current question time with previously spent time
   currentQuestionTime.value = Math.floor((questionTimeSpent.value[index] ?? 0) / 1000)
@@ -908,9 +1078,22 @@ const loadQuestion = async (index: number) => {
   saveExamState()
   
   // Close navigation panel after question selection (mobile only)
-  if (window.innerWidth <= 768) {
+  if (globalThis.innerWidth <= 768) {
     showNavigationPanel.value = false
   }
+}
+
+// NAT numeric input handler (Option C mixed papers)
+const onNatInput = (value: string) => {
+  if (value === '' || value === null) {
+    delete natAnswers[currentQuestionIndex.value]
+  } else {
+    natAnswers[currentQuestionIndex.value] = value
+  }
+  saveExamState()
+  saveCurrentAnswerWithState().catch((error) => {
+    console.error('Failed to save NAT answer immediately:', error)
+  })
 }
 
 const selectOption = (optionIndex: number) => {
@@ -939,29 +1122,50 @@ const selectOption = (optionIndex: number) => {
 
 // Save current answer to API
 const saveCurrentAnswer = async () => {
-  if (!attemptId.value || !currentQuestion.value || answers[currentQuestionIndex.value] === undefined) {
-    return // No answer to save
-  }
-  
-  const question = currentQuestion.value
-  const optionIndex = answers[currentQuestionIndex.value]
-  const questionTextId = question.question_text_id ?? question.question_id
-  const selectedOptionId = question.option_ids?.[optionIndex]
-  
-  if (!selectedOptionId) {
-    console.error('No option ID found for index:', optionIndex, 'in option_ids:', question.option_ids)
+  if (!attemptId.value || !currentQuestion.value) {
     return
   }
-  
+
+  const question = currentQuestion.value
+  const questionTextId = question.question_text_id ?? question.question_id
   const timeSpent = currentQuestionTime.value
-  
-  const submissionData = {
-    test_attempt_id: attemptId.value,
-    question_id: question.question_id,
-    question_text_id: questionTextId,
-    selected_option_id: selectedOptionId,
-    time_spent_seconds: timeSpent,
-    is_flagged: markedQuestions.value.has(currentQuestionIndex.value)
+
+  let submissionData: any = null
+
+  if (isNatQuestion.value) {
+    // NAT question: submit the numeric answer instead of an option
+    const raw = natAnswers[currentQuestionIndex.value]
+    if (raw === undefined || raw === '') return
+    const numericValue = Number.parseFloat(raw)
+    if (Number.isNaN(numericValue)) return
+    submissionData = {
+      test_attempt_id: attemptId.value,
+      question_id: question.question_id,
+      question_text_id: questionTextId,
+      numeric_answer: numericValue,
+      time_spent_seconds: timeSpent,
+      is_flagged: markedQuestions.value.has(currentQuestionIndex.value)
+    }
+  } else {
+    if (answers[currentQuestionIndex.value] === undefined) {
+      return // No answer to save
+    }
+    const optionIndex = answers[currentQuestionIndex.value]
+    const selectedOptionId = question.option_ids?.[optionIndex]
+
+    if (!selectedOptionId) {
+      console.error('No option ID found for index:', optionIndex, 'in option_ids:', question.option_ids)
+      return
+    }
+
+    submissionData = {
+      test_attempt_id: attemptId.value,
+      question_id: question.question_id,
+      question_text_id: questionTextId,
+      selected_option_id: selectedOptionId,
+      time_spent_seconds: timeSpent,
+      is_flagged: markedQuestions.value.has(currentQuestionIndex.value)
+    }
   }
   
   console.log('Saving answer:', submissionData)
@@ -1039,6 +1243,7 @@ const toggleMark = () => {
 
 const clearAnswer = () => {
   delete answers[currentQuestionIndex.value]
+  delete natAnswers[currentQuestionIndex.value]
   saveExamState() // Save state after clearing answer
 }
 
@@ -1046,7 +1251,7 @@ const startTimer = () => {
   timer.value = setInterval(() => {
     timeRemaining.value--
     if (timeRemaining.value <= 0) {
-      clearInterval(timer.value)
+      if (timer.value) clearInterval(timer.value)
       autoSubmitExam()
     }
   }, 1000)
@@ -1183,8 +1388,12 @@ const getQuestionBtnClass = (index: number) => {
     classes.push('current')
   }
   
+  if (isQuestionLocked(index)) {
+    classes.push('locked')
+  }
+  
   const isVisited = visitedQuestions.value.has(index)
-  const isAnswered = answers[index] !== undefined
+  const isAnswered = answers[index] !== undefined || (natAnswers[index] !== undefined && natAnswers[index] !== '')
   const isMarked = markedQuestions.value.has(index)
   
   if (!isVisited) {
@@ -1281,17 +1490,17 @@ const toggleNavigationPanel = () => {
 
 // Security functions to prevent cheating
 const blockBackNavigation = () => {
-  window.history.pushState(null, '', window.location.href)
+  globalThis.history.pushState(null, '', globalThis.location.href)
   
-  window.addEventListener('popstate', (event) => {
-    window.history.pushState(null, '', window.location.href)
+  globalThis.addEventListener('popstate', (event) => {
+    globalThis.history.pushState(null, '', globalThis.location.href)
     // Don't show confirmation during exam, just block navigation
     event.preventDefault()
     return false
   })
   
   // Block keyboard shortcuts
-  window.addEventListener('keydown', (e) => {
+  globalThis.addEventListener('keydown', (e) => {
     if ((e.altKey && e.key === 'ArrowLeft') ||
         (e.altKey && e.key === 'ArrowRight') ||
         e.key === 'F5' ||
@@ -1331,8 +1540,8 @@ onMounted(() => {
   detectDevice() // Call detectDevice on mount
   
   // Expose test function for debugging
-  ;(window as Window & { testAddAnswers?: () => void; debugAnswers?: () => void }).testAddAnswers = testAddAnswers
-  ;(window as Window & { testAddAnswers?: () => void; debugAnswers?: () => void }).debugAnswers = () => {
+  ;(globalThis as Window & { testAddAnswers?: () => void; debugAnswers?: () => void }).testAddAnswers = testAddAnswers
+  ;(globalThis as Window & { testAddAnswers?: () => void; debugAnswers?: () => void }).debugAnswers = () => {
     console.log('Current answers:', answers)
     console.log('Current answers keys:', Object.keys(answers))
     console.log('Current answers stringified:', JSON.stringify(answers))
@@ -1340,15 +1549,16 @@ onMounted(() => {
 
   // Add event listeners for page visibility and beforeunload
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  window.addEventListener('beforeunload', handleBeforeUnload)
-  window.addEventListener('online', handleOnlineStatus)
-  window.addEventListener('offline', handleOnlineStatus)
+  globalThis.addEventListener('beforeunload', handleBeforeUnload)
+  globalThis.addEventListener('online', handleOnlineStatus)
+  globalThis.addEventListener('offline', handleOnlineStatus)
 })
 
 onUnmounted(() => {
   if (timer.value) {
     clearInterval(timer.value)
   }
+  stopSectionTimer()
   if (questionTimer.value) {
     clearInterval(questionTimer.value)
   }
@@ -1360,16 +1570,16 @@ onUnmounted(() => {
   }
 
   // Clean up pending sync timers
-  if (window.examTimers) {
-    window.examTimers.forEach(timer => clearInterval(timer))
-    window.examTimers = []
+  if (globalThis.examTimers) {
+    for (const timer of globalThis.examTimers) clearInterval(timer);
+    globalThis.examTimers = []
   }
 
   // Remove event listeners
   document.removeEventListener('visibilitychange', handleVisibilityChange)
-  window.removeEventListener('beforeunload', handleBeforeUnload)
-  window.removeEventListener('online', handleOnlineStatus)
-  window.removeEventListener('offline', handleOnlineStatus)
+  globalThis.removeEventListener('beforeunload', handleBeforeUnload)
+  globalThis.removeEventListener('online', handleOnlineStatus)
+  globalThis.removeEventListener('offline', handleOnlineStatus)
 })
 </script>
 
@@ -1398,14 +1608,7 @@ body {
   color: #6c757d;
 }
 
-/* Fullscreen styles */
-.exam-container {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Exam container adjustments for recovery notification */
+/* Fullscreen styles / exam container (incl. recovery notification padding) */
 .exam-container {
   min-height: 100vh;
   display: flex;
@@ -1650,6 +1853,30 @@ body {
   color: #333;
 }
 
+.passage-panel {
+  background: #f4f7fb;
+  border: 1px solid #d7e3f4;
+  border-left: 4px solid #0d6efd;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.passage-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #0d6efd;
+  margin-bottom: 8px;
+}
+
+.passage-text {
+  font-size: 1rem;
+  line-height: 1.65;
+  color: #243447;
+  white-space: pre-wrap;
+}
+
 .question-image {
   margin: 20px 0;
   text-align: center;
@@ -1861,6 +2088,47 @@ body {
 .question-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Sectional exams: expired-section questions are locked */
+.question-btn.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* Section banner (Option C sectional/NAT exams) */
+.section-banner {
+  background: #212529;
+  color: #ffc107;
+  padding: 8px 0;
+  font-size: 0.95rem;
+}
+
+.section-banner .section-timer {
+  font-weight: 600;
+}
+
+/* NAT numeric input */
+.nat-container {
+  padding: 20px;
+  background: #f8f9fa;
+  border: 2px dashed #ced4da;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.nat-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.nat-input {
+  max-width: 300px;
+  font-size: 1.25rem;
+  padding: 10px 15px;
+  margin-bottom: 5px;
 }
 
 /* Legend */

@@ -15,9 +15,9 @@
       <!-- Loading state -->
       <div v-if="loading" class="row justify-content-center my-5">
         <div class="col-12 text-center">
-          <div class="spinner-border text-primary" role="status">
+          <output class="spinner-border text-primary">
             <span class="visually-hidden">Loading...</span>
-          </div>
+          </output>
           <p class="mt-2 text-muted">Loading your allocated standards...</p>
         </div>
       </div>
@@ -131,7 +131,7 @@ const fetchAllocatedStandards = async () => {
       if (teacherData.teaching_subjects && teacherData.teaching_subjects.length > 0) {
         const uniqueStandards = new Map()
         
-        teacherData.teaching_subjects.forEach((ts: any) => {
+        for (const ts of teacherData.teaching_subjects) {
           const standardId = ts.standard.id
           if (!uniqueStandards.has(standardId)) {
             uniqueStandards.set(standardId, {
@@ -141,7 +141,7 @@ const fetchAllocatedStandards = async () => {
               medium: ts.medium
             })
           }
-        })
+        }
         
         allocatedStandards.value = Array.from(uniqueStandards.values())
       } else {
@@ -185,7 +185,7 @@ onMounted(() => {
 <style scoped>
 .manage-iti-students {
   background-color: #f8f9fa;
-  min-height: calc(100vh - 76px);
+  min-height: calc(100vh - var(--topbar-height, 56px));
 }
 
 .standard-card {

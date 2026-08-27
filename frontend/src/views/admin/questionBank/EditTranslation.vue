@@ -2,18 +2,30 @@
   <div class="container my-4">
     <div class="container">
       <div class="row g-2 justify-content-end">
-        <router-link class="btn btn-close" :to="{ name: 'questionDashboard' }" aria-label="Close"></router-link>
+        <router-link class="btn btn-close" :to="closeLink" aria-label="Close"></router-link>
       </div>
       <div class="row justify-content-center align-items-center my-2">
         <div class="col col-12 col-sm-10 ">
-          <p class="text-muted text-start fs-5 m-0">
-            <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
-            <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
-          </p>
-          <h4 class="fw-bolder text-start text-dark m-0 ">
-            Standard {{ questionBankData.standardName }}
-            <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
-          </h4>
+          <template v-if="isExamScope">
+            <p class="text-muted text-start fs-5 m-0">
+              {{ questionBankData.programLabel }}
+              <span v-if="questionBankData.mediumName"> | {{ questionBankData.mediumName }}</span>
+            </p>
+            <h4 class="fw-bolder text-start text-dark m-0 ">
+              {{ questionBankData.nodeName }}
+              <span class="d-block text-start text-secondary">Competitive / Entrance syllabus</span>
+            </h4>
+          </template>
+          <template v-else>
+            <p class="text-muted text-start fs-5 m-0">
+              <span class="col-12 col-md-auto">{{ questionBankData.boardName }} |</span>
+              <span class="col-12 col-md-auto"> {{ questionBankData.mediumName }}</span>
+            </p>
+            <h4 class="fw-bolder text-start text-dark m-0 ">
+              Standard {{ questionBankData.standardName }}
+              <span class="d-block text-start text-secondary">{{ questionBankData.subjectName }} : {{ questionBankData.chapterName }}</span>
+            </h4>
+          </template>
           <h4 class="text-left fw-bolder text-uppercase mb-2" id="pageHeader">Edit Translation</h4>
         </div>
       </div>
@@ -283,7 +295,7 @@
                         <div class="form-floating mb-2">
                           <input type="text" :value="option" readonly class="form-control" :id="'option' + (index + 1) + 'Translate'">
                           <label :for="'option' + (index + 1) + 'Translate'" class="small">
-                            Option {{ String.fromCharCode(65 + index) }}
+                            Option {{ String.fromCodePoint(65 + index) }}
                             <span v-if="originalOptionIsCorrect[index]" class="badge bg-success ms-1">Correct</span>
                           </label>
                         </div>
@@ -314,7 +326,7 @@
                     <div class="form-floating mb-2">
                       <input type="text" v-model="translatedOptions[index]" class="form-control" :id="'option' + (index + 1)" :placeholder="'Option ' + (index + 1)">
                       <label :for="'option' + (index + 1)">
-                        Option {{ String.fromCharCode(65 + index) }}
+                        Option {{ String.fromCodePoint(65 + index) }}
                         <span class="badge bg-primary language-badge">{{ questionBankData.mediumName }}</span>
                         <span v-if="originalOptionIsCorrect[index]" class="badge bg-success ms-1">Correct</span>
                       </label>
@@ -436,7 +448,7 @@
                         <div class="col-md-5">
                           <div class="d-flex align-items-center">
                             <div class="option-letter me-2">
-                              {{ String.fromCharCode(65 + index) }}
+                              {{ String.fromCodePoint(65 + index) }}
                     </div>
                             <div class="option-text flex-grow-1">
                               <strong>{{ pair.left_text || '' }}</strong>
@@ -519,7 +531,7 @@
                         <template v-if="pair.left_text">
                           <div class="col-md-5">
                             <label :for="'lhs-' + index" class="form-label">
-                              Left Side {{ String.fromCharCode(65 + index) }}
+                              Left Side {{ String.fromCodePoint(65 + index) }}
                                 <span class="badge bg-primary language-badge">{{ questionBankData.mediumName }}</span>
                               </label>
                             <textarea 
@@ -666,11 +678,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axiosInstance from '@/config/axios'
 import { useToastStore } from '@/store/toast'
 import ImageUploadEditor from '@/components/common/ImageUploadEditor.vue'
+import { resolveExamChapterId } from '@/utils/examSyllabus'
 
 // Define custom error type for Axios errors
 interface AxiosErrorResponse {
@@ -693,6 +706,7 @@ const toastStore = useToastStore()
 
 // Data from localStorage
 const questionBankData = ref({
+  scope: 'board' as 'board' | 'exam',
   boardId: '',
   boardName: '',
   mediumId: '',
@@ -703,8 +717,62 @@ const questionBankData = ref({
   subjectName: '',
   chapterId: '',
   chapterName: '',
-  mediumStandardSubjectId: null
+  mediumStandardSubjectId: null as number | null,
+  programId: '',
+  programLabel: '',
+  nodeId: '',
+  nodeName: '',
 })
+
+const isExamScope = computed(() => {
+  const data = questionBankData.value
+  return data.scope === 'exam' || (!!data.programId && !!resolveExamChapterId(data))
+})
+
+function examDashboardQuery(extra: Record<string, string | undefined> = {}) {
+  return {
+    scope: 'exam',
+    programId: String(questionBankData.value.programId),
+    chapterId: String(
+      questionBankData.value.chapterId || resolveExamChapterId(questionBankData.value) || '',
+    ),
+    ...(questionBankData.value.stageId ? { stageId: String(questionBankData.value.stageId) } : {}),
+    ...(questionBankData.value.subjectId ? { subjectId: String(questionBankData.value.subjectId) } : {}),
+    ...((questionBankData.value as { topicId?: string }).topicId
+      ? { topicId: String((questionBankData.value as { topicId?: string }).topicId) }
+      : {}),
+    ...(questionBankData.value.mediumId
+      ? {
+          mediumId: String(questionBankData.value.mediumId),
+          ...(questionBankData.value.mediumName
+            ? { mediumName: questionBankData.value.mediumName }
+            : {}),
+        }
+      : {}),
+    ...extra,
+  }
+}
+
+const closeLink = computed(() => {
+  if (isExamScope.value) {
+    return { name: 'questionDashboard', query: examDashboardQuery() }
+  }
+  return { name: 'questionDashboard' }
+})
+
+function questionDashboardQuery(extra: Record<string, string | undefined> = {}) {
+  if (isExamScope.value) {
+    return examDashboardQuery(extra)
+  }
+  return extra
+}
+
+function navigateToQuestionDashboard(extra: Record<string, string | undefined> = {}) {
+  router.push({
+    name: 'questionDashboard',
+    query: questionDashboardQuery(extra),
+  })
+}
 
 // Define interfaces for image handling
 interface QuestionImage {
@@ -1213,12 +1281,9 @@ async function updateTranslation() {
     }
     
     // Navigate back with success message
-    router.push({
-      name: 'questionDashboard',
-      query: {
-        success: 'true',
-        message: 'Translation updated successfully'
-      }
+    navigateToQuestionDashboard({
+      success: 'true',
+      message: 'Translation updated successfully',
     });
   } catch (error: unknown) {
     console.error('Error updating translation:', error);
@@ -1247,7 +1312,7 @@ function getQuestionIdFromRoute() {
       message: 'Question ID not provided',
       type: 'error'
     });
-    router.push({ name: 'questionDashboard' });
+    navigateToQuestionDashboard();
     return null;
   }
   return Number(id);
@@ -1264,7 +1329,7 @@ function validateAndGetTopicId(questionDetails: Record<string, unknown>) {
       message: 'Question has no associated topic',
       type: 'error'
     });
-    router.push({ name: 'questionDashboard' });
+    navigateToQuestionDashboard();
     return null;
   }
   
@@ -1297,7 +1362,7 @@ function findTranslationToEdit(allQuestionTexts: QuestionTranslation[], targetMe
       message: 'No translation found for this medium',
       type: 'error'
     });
-    router.push({ name: 'questionDashboard' });
+    navigateToQuestionDashboard();
     return null;
   }
 
@@ -1331,7 +1396,7 @@ function processAvailableTranslations(questionData: Record<string, unknown>, tar
   return { 
     availableTranslations: filteredTranslations, 
     originalTranslation, 
-    originalIndex: originalIndex >= 0 ? originalIndex : 0
+    originalIndex: Math.max(0, originalIndex)
   };
 }
 
@@ -1389,14 +1454,14 @@ function processMcqOptions(referenceTranslation: QuestionTranslation, translatio
   originalOptions.value = referenceTranslation.mcq_options.map((opt: McqOption) => opt.option_text);
 
   // Extract option images and correct answers
-  originalOptionImages.value = Array(originalOptions.value.length).fill(null);
-  optionImageLoading.value = Array(originalOptions.value.length).fill(false);
-  optionImageError.value = Array(originalOptions.value.length).fill(false);
-  originalOptionIsCorrect.value = Array(originalOptions.value.length).fill(false);
-  optionImageIds.value = Array(originalOptions.value.length).fill(null);
+  originalOptionImages.value = new Array(originalOptions.value.length).fill(null);
+  optionImageLoading.value = new Array(originalOptions.value.length).fill(false);
+  optionImageError.value = new Array(originalOptions.value.length).fill(false);
+  originalOptionIsCorrect.value = new Array(originalOptions.value.length).fill(false);
+  optionImageIds.value = new Array(originalOptions.value.length).fill(null);
 
   // Process each option
-  referenceTranslation.mcq_options.forEach((option: McqOption, index: number) => {
+  for (const [index, option] of referenceTranslation.mcq_options.entries()) {
     if (option.is_correct) {
       originalOptionIsCorrect.value[index] = true;
     }
@@ -1407,16 +1472,16 @@ function processMcqOptions(referenceTranslation: QuestionTranslation, translatio
       optionImageLoading.value[index] = true;
       optionImageIds.value[index] = option.image_id;
     }
-  });
+  }
 
   // Now load the translated options
   if (translationToEdit.mcq_options) {
-    translatedOptions.value = Array(originalOptions.value.length).fill('');
-    translationToEdit.mcq_options.forEach((option: McqOption, index: number) => {
+    translatedOptions.value = new Array(originalOptions.value.length).fill('');
+    for (const [index, option] of translationToEdit.mcq_options.entries()) {
       if (index < translatedOptions.value.length) {
         translatedOptions.value[index] = option.option_text;
       }
-    });
+    }
   }
 }
 
@@ -1441,23 +1506,23 @@ function processMatchPairs(referenceTranslation: QuestionTranslation, translatio
 
 // Initialize arrays for match pair images
 function initializeMatchPairArrays() {
-  originalMatchPairLeftImages.value = Array(originalMatchPairs.value.length).fill(null);
-  originalMatchPairRightImages.value = Array(originalMatchPairs.value.length).fill(null);
-  pairLeftImageLoading.value = Array(originalMatchPairs.value.length).fill(false);
-  pairLeftImageError.value = Array(originalMatchPairs.value.length).fill(false);
-  pairRightImageLoading.value = Array(originalMatchPairs.value.length).fill(false);
-  pairRightImageError.value = Array(originalMatchPairs.value.length).fill(false);
-  pairLeftImagePreviews.value = Array(originalMatchPairs.value.length).fill(null);
-  pairRightImagePreviews.value = Array(originalMatchPairs.value.length).fill(null);
-  pairLeftImageIds.value = Array(originalMatchPairs.value.length).fill(null);
-  pairRightImageIds.value = Array(originalMatchPairs.value.length).fill(null);
+  originalMatchPairLeftImages.value = new Array(originalMatchPairs.value.length).fill(null);
+  originalMatchPairRightImages.value = new Array(originalMatchPairs.value.length).fill(null);
+  pairLeftImageLoading.value = new Array(originalMatchPairs.value.length).fill(false);
+  pairLeftImageError.value = new Array(originalMatchPairs.value.length).fill(false);
+  pairRightImageLoading.value = new Array(originalMatchPairs.value.length).fill(false);
+  pairRightImageError.value = new Array(originalMatchPairs.value.length).fill(false);
+  pairLeftImagePreviews.value = new Array(originalMatchPairs.value.length).fill(null);
+  pairRightImagePreviews.value = new Array(originalMatchPairs.value.length).fill(null);
+  pairLeftImageIds.value = new Array(originalMatchPairs.value.length).fill(null);
+  pairRightImageIds.value = new Array(originalMatchPairs.value.length).fill(null);
 }
 
 // Process images for match pairs
 function processMatchPairImages(referenceTranslation: QuestionTranslation) {
   if (!referenceTranslation.match_pairs) return;
   
-  referenceTranslation.match_pairs.forEach((pair: MatchPair, index: number) => {
+  for (const [index, pair] of referenceTranslation.match_pairs.entries()) {
     // Handle left image
     if (pair.left_image_id && pair.left_image) {
       const leftUrl = pair.left_image.presigned_url ?? pair.left_image.image_url;
@@ -1477,7 +1542,7 @@ function processMatchPairImages(referenceTranslation: QuestionTranslation) {
       }
       pairRightImageIds.value[index] = pair.right_image_id;
     }
-  });
+  }
 }
 
 // Load translated match pairs
@@ -1488,7 +1553,7 @@ function loadTranslatedMatchPairs(translationToEdit: QuestionTranslation) {
     );
   } else {
     // Initialize empty pairs matching original length
-    translatedMatchPairs.value = Array(originalMatchPairs.value.length)
+    translatedMatchPairs.value = new Array(originalMatchPairs.value.length)
       .fill(0)
       .map(() => ({ left_text: '', right_text: '' }));
   }
@@ -1522,7 +1587,7 @@ async function loadQuestionData() {
     console.log(`Using topic ID: ${topicId.value} for question ID: ${questionId.value}`);
 
     // Get target medium ID (the medium we're editing the translation for)
-    const targetMediumId = parseInt(questionBankData.value.mediumId.toString());
+    const targetMediumId = Number.parseInt(questionBankData.value.mediumId.toString(), 10);
 
     // Find the translation for the target medium
     const allQuestionTexts = questionDetails.question_texts || [];
@@ -1571,9 +1636,9 @@ async function loadQuestionData() {
 
     // Initialize textareas
     setTimeout(() => {
-      document.querySelectorAll('textarea').forEach(textarea => {
+      for (const textarea of document.querySelectorAll('textarea')) {
         autoResize({ target: textarea } as unknown as Event);
-      });
+      }
     }, 0);
 
     // Ensure minimum loading time to avoid flickering UI
@@ -1593,7 +1658,7 @@ async function loadQuestionData() {
     });
 
     // Redirect back if we couldn't load the question
-    router.push({ name: 'questionDashboard' });
+    navigateToQuestionDashboard();
   } finally {
     // Clear loading state when done
     isInitialLoading.value = false;
@@ -1617,9 +1682,9 @@ function changeTranslation(index: number) {
 
     // Resize textareas after update
     setTimeout(() => {
-      document.querySelectorAll('textarea').forEach(textarea => {
+      for (const textarea of document.querySelectorAll('textarea')) {
         autoResize({ target: textarea } as unknown as Event);
-      });
+      }
     }, 0);
   }
 }
@@ -1665,16 +1730,16 @@ function updateOptionsIfNeeded(translation: {
 // Helper function to reset option arrays
 function resetOptionArrays() {
   const optionCount = originalOptions.value.length;
-  originalOptionImages.value = Array(optionCount).fill(null);
-  optionImageLoading.value = Array(optionCount).fill(false);
-  optionImageError.value = Array(optionCount).fill(false);
-  originalOptionIsCorrect.value = Array(optionCount).fill(false);
-  optionImageIds.value = Array(optionCount).fill(null);
+  originalOptionImages.value = new Array(optionCount).fill(null);
+  optionImageLoading.value = new Array(optionCount).fill(false);
+  optionImageError.value = new Array(optionCount).fill(false);
+  originalOptionIsCorrect.value = new Array(optionCount).fill(false);
+  optionImageIds.value = new Array(optionCount).fill(null);
 }
 
 // Helper function to update option details
 function updateOptionDetails(options: McqOption[]) {
-  options.forEach((option: McqOption, index: number) => {
+  for (const [index, option] of options.entries()) {
     // Set correct option
     if (option.is_correct) {
       originalOptionIsCorrect.value[index] = true;
@@ -1686,7 +1751,7 @@ function updateOptionDetails(options: McqOption[]) {
       optionImageLoading.value[index] = true;
       optionImageIds.value[index] = option.image_id;
     }
-  });
+  }
 }
 
 // Function to handle option image loading
@@ -1710,7 +1775,7 @@ function handleOptionImageChange(event: Event, index: number) {
 
     // Initialize the array if needed
     if (!selectedOptionFiles.value) {
-      selectedOptionFiles.value = Array(originalOptions.value.length).fill(null);
+      selectedOptionFiles.value = new Array(originalOptions.value.length).fill(null);
     }
 
     // Store the file reference
@@ -1722,7 +1787,7 @@ function handleOptionImageChange(event: Event, index: number) {
 
     // Initialize optionImagePreviews array if it doesn't exist
     if (!optionImagePreviews.value) {
-      optionImagePreviews.value = Array(originalOptions.value.length).fill(null);
+      optionImagePreviews.value = new Array(originalOptions.value.length).fill(null);
     }
 
     // Set the preview URL for this index
@@ -1731,7 +1796,7 @@ function handleOptionImageChange(event: Event, index: number) {
     // Show a toast notification to provide feedback
     toastStore.showToast({
       title: 'Option Image Selected',
-      message: `Image for Option ${String.fromCharCode(65 + index)} will be uploaded when you click Update`,
+      message: `Image for Option ${String.fromCodePoint(65 + index)} will be uploaded when you click Update`,
       type: 'info'
     });
 
@@ -1760,31 +1825,20 @@ function clearOptionImage(index: number) {
 }
 
 // Cleanup function to release all object URLs when component is unmounted
-function cleanupObjectURLs() {
-  // Clean up question image preview
-  if (questionImagePreview.value) {
-    URL.revokeObjectURL(questionImagePreview.value);
+function revokePreviewUrls(urls: Array<string | null> | null | undefined) {
+  if (!urls) return
+  for (const url of urls) {
+    if (url) URL.revokeObjectURL(url)
   }
+}
 
-  // Clean up option image previews
-  if (optionImagePreviews.value) {
-    optionImagePreviews.value.forEach((url) => {
-      if (url) URL.revokeObjectURL(url);
-    });
+function cleanupObjectURLs() {
+  if (questionImagePreview.value) {
+    URL.revokeObjectURL(questionImagePreview.value)
   }
-  
-  // Clean up match pair image previews
-  if (pairLeftImagePreviews.value) {
-    pairLeftImagePreviews.value.forEach((url) => {
-      if (url) URL.revokeObjectURL(url);
-    });
-  }
-  
-  if (pairRightImagePreviews.value) {
-    pairRightImagePreviews.value.forEach((url) => {
-      if (url) URL.revokeObjectURL(url);
-    });
-  }
+  revokePreviewUrls(optionImagePreviews.value)
+  revokePreviewUrls(pairLeftImagePreviews.value)
+  revokePreviewUrls(pairRightImagePreviews.value)
 }
 
 // Function to insert blank in Fill in the Blanks questions
@@ -1860,7 +1914,7 @@ function handlePairLeftImageChange(event: Event, index: number) {
   if (input.files && input.files.length > 0) {
     // Store file for upload later
     if (!selectedPairLeftFiles.value) {
-      selectedPairLeftFiles.value = Array(originalMatchPairs.value.length).fill(null);
+      selectedPairLeftFiles.value = new Array(originalMatchPairs.value.length).fill(null);
     }
     selectedPairLeftFiles.value[index] = input.files[0];
     
@@ -1896,7 +1950,7 @@ function handlePairRightImageChange(event: Event, index: number) {
   if (input.files && input.files.length > 0) {
     // Store file for upload later
     if (!selectedPairRightFiles.value) {
-      selectedPairRightFiles.value = Array(originalMatchPairs.value.length).fill(null);
+      selectedPairRightFiles.value = new Array(originalMatchPairs.value.length).fill(null);
     }
     selectedPairRightFiles.value[index] = input.files[0];
     
